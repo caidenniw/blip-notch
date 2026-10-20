@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use tauri::AppHandle;
 
 static CATCHER: AtomicIsize = AtomicIsize::new(0);
+/// Pending geometry requested before the catcher window was ready.
+static PENDING: std::sync::Mutex<Option<(i32, i32, i32, i32)>> = std::sync::Mutex::new(None);
 
 /// Window message used to move the catcher from its own thread.
 const MOVE_MSG: u32 = 0x8000 + 1; // WM_APP + 1
@@ -188,9 +190,7 @@ mod imp {
             let _ = self.app.emit("shelf:drop", paths.clone());
             let _ = self.app.emit("drag-near", false);
             conf::log(&format!("drop masuk {} file", paths.len()));
-            unsafe {
-                *pdweffect = DROPEFFECT_COPY;
-            }
+            unsafe { *pdweffect = DROPEFFECT_COPY; }
             self.valid.set(false);
             self.hide_self();
             Ok(())
@@ -241,6 +241,10 @@ mod imp {
             .into();
             RegisterDragDrop(hwnd, &target)?;
             CATCHER.store(hwnd.0 as isize, Ordering::SeqCst);
+            // Apply any geometry that was requested before this thread was ready.
+            if let Some((x, y, w, h)) = PENDING.lock().unwrap().take() {
+                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
             conf::log("dropzone siap");
 
             let mut msg = MSG::default();
@@ -257,6 +261,8 @@ mod imp {
     pub fn show(x: i32, y: i32, w: i32, h: i32) {
         let raw = CATCHER.load(Ordering::SeqCst);
         if raw == 0 {
+            // Catcher thread not ready yet: store for application at startup.
+            *PENDING.lock().unwrap() = Some((x, y, w, h));
             return;
         }
         let packed_xy = (x as u16 as usize) | ((y as u16 as usize) << 16);

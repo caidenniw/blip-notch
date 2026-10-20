@@ -50,12 +50,25 @@ impl Default for Stt {
 #[serde(default, rename_all = "camelCase")]
 pub struct Tts {
     pub enabled: bool,
+    /// Edge-TTS voice, also the fallback when ElevenLabs is off or fails.
     pub voice: String,
+    /// "edge" or "elevenlabs".
+    pub provider: String,
+    pub eleven_api_key: String,
+    pub eleven_voice_id: String,
+    pub eleven_model: String,
 }
 
 impl Default for Tts {
     fn default() -> Self {
-        Self { enabled: true, voice: "id-ID-ArdiNeural".into() }
+        Self {
+            enabled: true,
+            voice: "id-ID-ArdiNeural".into(),
+            provider: "edge".into(),
+            eleven_api_key: String::new(),
+            eleven_voice_id: String::new(),
+            eleven_model: "eleven_multilingual_v2".into(),
+        }
     }
 }
 

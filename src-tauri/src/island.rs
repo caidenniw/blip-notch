@@ -190,10 +190,41 @@ fn hover_loop(app: AppHandle) {
     let mut dwell: u32 = 0;
     let mut catcher_on = false;
     let mut catcher_release: Option<std::time::Instant> = None;
+    let mut catcher_positioned = false;
     let mut iter: u64 = 0;
     loop {
         std::thread::sleep(Duration::from_millis(16));
         iter += 1;
+        if !catcher_positioned {
+            // Use the primary monitor's full width so no matter where the user drops,
+            // OLE always finds the catcher.  Height 200 physical px covers the notch area.
+            #[cfg(windows)]
+            {
+                use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
+                let Ok(pos) = win.outer_position() else { continue };
+                let scale = win.scale_factor().unwrap_or(1.0);
+                let h_px = (200.0 * scale) as i32;
+                let (sw, sy) = unsafe {
+                    if let Ok(hwnd2) = win.hwnd() {
+                        let hmon = MonitorFromWindow(hwnd2, MONITOR_DEFAULTTOPRIMARY);
+                        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+                        if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+                            let r = &mi.rcMonitor;
+                            ((r.right - r.left) as i32, r.top)
+                        } else { (1920, 0) }
+                    } else { (1920, pos.y) }
+                };
+                dropzone::show(0, sy, sw, h_px);
+                catcher_positioned = true;
+            }
+            #[cfg(not(windows))]
+            {
+                let Ok(pos) = win.outer_position() else { continue };
+                let scale = win.scale_factor().unwrap_or(1.0);
+                dropzone::show(pos.x + ((WIN_W / 2.0 - MAGNET) * scale) as i32, pos.y, (2.0 * MAGNET * scale) as i32, (200.0 * scale) as i32);
+                catcher_positioned = true;
+            }
+        }
 
         if iter % 60 == 0 {
             #[cfg(windows)]
@@ -296,36 +327,14 @@ fn hover_loop(app: AppHandle) {
         // A press that started inside (text selection, scrollbar, seek drag) keeps the panel open.
         let held_inside = lbtn && !press_outside && hovering;
 
-        if dragging {
+        // catcher is always-on; nothing to do here for external OLE drops.
+        // For internal drag-out, the catcher is already visible.
+        if !lbtn {
             catcher_release = None;
+            catcher_on = false;
         }
-        if dragging
-            && !catcher_on
-            && cx >= WIN_W / 2.0 - MAGNET
-            && cx <= WIN_W / 2.0 + MAGNET
-            && cy >= -4.0
-            && cy <= 120.0
-        {
-            dropzone::show(
-                pos.x + ((WIN_W / 2.0 - MAGNET) * scale) as i32,
-                pos.y,
-                (2.0 * MAGNET * scale) as i32,
-                (200.0 * scale) as i32,
-            );
-            catcher_on = true;
-        }
-        if !lbtn && catcher_on {
-            // OLE still needs the window for the release itself: give Drop/DragLeave time to
-            // arrive, then fall back to hiding it ourselves.
-            let deadline = *catcher_release.get_or_insert_with(|| {
-                std::time::Instant::now() + Duration::from_millis(600)
-            });
-            if std::time::Instant::now() >= deadline {
-                dropzone::hide();
-                catcher_on = false;
-                catcher_release = None;
-            }
-        }
+        if dragging { catcher_on = true; }
+        let _ = catcher_release;
 
         let inside = if compact && !hovering {
             // The notch is a sliver: only a deliberate dwell on the very top edge wakes it,

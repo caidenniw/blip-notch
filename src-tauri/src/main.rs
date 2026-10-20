@@ -31,7 +31,6 @@ fn main() {
             island::release_focus,
             ai::chat_send,
             ai::chat_abort,
-            ai::speak,
             ai::stop_speak,
             ai::beep,
             rec::rec_start,

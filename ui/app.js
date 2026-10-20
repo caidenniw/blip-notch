@@ -697,7 +697,7 @@
       }
     }, 45000);
 
-    invoke('chat_send', { id, messages: history }).catch(err => onChatError({ id, error: String(err) }));
+    invoke('chat_send', { id, messages: history, speak: ttsOn }).catch(err => onChatError({ id, error: String(err) }));
   }
 
   listen('chat:chunk', e => {
@@ -735,11 +735,9 @@
     }
     if (state === 'open') {
       if (!hover) setTimeout(maybeClose, 1500);
-      if (text && ttsOn) invoke('speak', { text }).catch(() => {});
       return;
     }
-    if (text && ttsOn) invoke('speak', { text }).catch(() => scheduleCollapse());
-    else scheduleCollapse();
+    if (!ttsOn) scheduleCollapse();
     if (state !== 'answer') go('answer');
   });
 
