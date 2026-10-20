@@ -53,6 +53,9 @@ windows = { version = "0.62", features = [
   "Foundation",
   "Foundation_Collections",
   "Storage_Streams",
+  "Win32_System_Wmi",
+  "Devices_Enumeration",
+  "Devices_Bluetooth",
 ] }
 
 [profile.release]

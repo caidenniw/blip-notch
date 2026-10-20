@@ -101,7 +101,7 @@ body[data-state="thinking"] .ambient { opacity: .7; }
 body[data-state="answer"] .ambient { opacity: .25; }
 body[data-state="alert"] .ambient { opacity: .8; background: linear-gradient(90deg, #ff5a6e, #ff3a3a, #ff6b5f); }
 body[data-state="alert"][data-tone="ok"] .ambient { background: var(--glow); }
-body.sleepy .ambient { opacity: .18; }
+body.sleepy .ambient { opacity: .26; }
 body[data-page="focus"].focusing .ambient { background: linear-gradient(90deg, #ff5a6e, #ff3a3a, #ff6b5f); opacity: .35; }
 body[data-state="open"][data-page="music"].has-art .ambient {
   background: linear-gradient(90deg, var(--art), transparent 70%);
@@ -170,10 +170,10 @@ body[data-state="listening"] .eye { background: #8ce4ff; }
 body[data-state="alert"]:not([data-tone="ok"]) .eye { background: #ff8f8f; box-shadow: 0 0 6px 1px rgba(255,120,120,.6), 0 0 14px 4px rgba(255,80,80,.3); }
 body[data-state="alert"][data-tone="ok"] .eyes { animation: okFlash .55s ease; }
 @keyframes okFlash { 50% { filter: drop-shadow(0 0 5px var(--ok)); } }
-body.sleepy .eyes { --eye-expression: scaleY(.18); }
+body.sleepy .eyes { --eye-expression: scaleY(.42); }
 body.sleepy .eye { transition: transform 1.2s ease; }
 body.wake .eye { animation: wake .6s var(--spring); }
-@keyframes wake { 0% { transform: scaleY(.18); } 55% { transform: scaleY(1.15); } 100% { transform: none; } }
+@keyframes wake { 0% { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.42); } 55% { transform: scaleY(1.15); } 100% { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(1); } }
 body.talking .eye { animation: talk .22s ease-in-out infinite alternate; }
 @keyframes talk { to { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.6); } }
 .eye.blink { animation: blink 140ms ease; }
@@ -202,6 +202,8 @@ body[data-state="live"][data-live="music"].has-art .eyes { display: none; }
 body:not([data-state="idle"]) .label { display: flex; }
 #title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #detail { font-size: 11.5px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-state="live"][data-live="music"] #detail { color: rgba(236,239,247,.9); }
+body.has-lyrics[data-state="live"] #title { font-size: 12px; }
 #detail:empty { display: none; }
 
 /* equalizer */
@@ -235,8 +237,8 @@ body[data-state="listening"] .wave { display: flex; }
 }
 .hud-ic { width: 16px; height: 16px; flex: none; fill: currentColor; }
 .hud-label { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hud-bar { flex: 1; min-width: 30px; max-width: 110px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; }
-.hud-bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: #fff; transition: width .25s ease; }
+.hud-bar { flex: 1; min-width: 30px; max-width: 110px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; cursor: pointer; }
+.hud-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: #fff; transition: width .25s ease; pointer-events: none; }
 .hud-val { font-size: 11px; color: var(--mist); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
 .hud.nobar .hud-bar { display: none; }
 .hud.charge .hud-ic, .hud.charge .hud-val { color: var(--ok); }
@@ -410,7 +412,7 @@ body.lyr .lyr-wrap {
   transform: none;
 }
 
-.lyr {
+ol.lyr {
   list-style: none; flex: 1; min-height: 0; overflow-y: auto; padding: 0;
   -webkit-mask: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
           mask: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
@@ -441,6 +443,14 @@ body.lyr .lyr-wrap {
 .fmeta { display: flex; flex-direction: column; min-width: 0; }
 #fPhase { font-size: 15px; font-weight: 600; }
 #fCount { font-size: 11px; color: var(--mist); }
+.fdur { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--mist); }
+.fdur input {
+  width: 42px; padding: 3px 6px; text-align: center;
+  background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--ink); font: inherit; font-size: 11px; outline: none;
+}
+.fdur button { width: 20px; height: 20px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--ink); font-size: 13px; line-height: 1; }
+.fdur.off { opacity: .4; pointer-events: none; }
 .chips { display: flex; gap: 5px; margin: 6px 0 2px; }
 .chips button {
   border: 1px solid var(--line); background: transparent; color: var(--mist);

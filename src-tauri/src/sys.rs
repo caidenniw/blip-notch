@@ -140,6 +140,116 @@ fn snapshot(ep: Option<&IAudioEndpointVolume>, lang: String, net: bool, audio: S
     }
 }
 
+struct Brightness {
+    svc: Option<windows::Win32::System::Wmi::IWbemServices>,
+    dead: bool,
+}
+
+impl Brightness {
+    fn connect() -> Option<windows::Win32::System::Wmi::IWbemServices> {
+        use windows::core::BSTR;
+        use windows::Win32::System::Com::{
+            CoSetProxyBlanket, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+        };
+        use windows::Win32::System::Wmi::{IWbemContext, IWbemLocator, WbemLocator};
+        unsafe {
+            let loc: IWbemLocator = CoCreateInstance(&WbemLocator, None, CLSCTX_ALL).ok()?;
+            let svc = loc
+                .ConnectServer(
+                    &BSTR::from("ROOT\\WMI"),
+                    &BSTR::new(),
+                    &BSTR::new(),
+                    &BSTR::new(),
+                    0,
+                    &BSTR::new(),
+                    None::<&IWbemContext>,
+                )
+                .ok()?;
+            let _ = CoSetProxyBlanket(
+                &svc,
+                10, // RPC_C_AUTHN_WINNT
+                0,  // RPC_C_AUTHZ_NONE
+                windows::core::PCWSTR::null(),
+                RPC_C_AUTHN_LEVEL_CALL,
+                RPC_C_IMP_LEVEL_IMPERSONATE,
+                None,
+                EOAC_NONE,
+            );
+            Some(svc)
+        }
+    }
+
+    /// Current panel brightness 0..=100, or None when the display has no WMI brightness
+    /// (desktop monitors): then it stays disabled for the rest of the session.
+    fn read(&mut self) -> Option<u32> {
+        use windows::core::BSTR;
+        use windows::Win32::System::Variant::{VariantClear, VariantToUInt32, VARIANT};
+        use windows::Win32::System::Wmi::{
+            IWbemClassObject, IWbemContext, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY,
+        };
+        if self.dead {
+            return None;
+        }
+        if self.svc.is_none() {
+            self.svc = Self::connect();
+        }
+        let svc = self.svc.as_ref()?;
+        let got = unsafe {
+            (|| {
+                let en = svc
+                    .ExecQuery(
+                        &BSTR::from("WQL"),
+                        &BSTR::from(
+                            "SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE Active=TRUE",
+                        ),
+                        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                        None::<&IWbemContext>,
+                    )
+                    .ok()?;
+                let mut objs: [Option<IWbemClassObject>; 1] = [None];
+                let mut n = 0u32;
+                let _ = en.Next(2000, &mut objs, &mut n);
+                if n == 0 {
+                    return None;
+                }
+                let obj = objs[0].take()?;
+                let mut v = VARIANT::default();
+                obj.Get(windows::core::w!("CurrentBrightness"), 0, &mut v, None, None)
+                    .ok()?;
+                let out = VariantToUInt32(&v).ok();
+                let _ = VariantClear(&mut v);
+                out
+            })()
+        };
+        if got.is_none() {
+            self.dead = true;
+            conf::log("brightness tidak tersedia");
+        }
+        got.map(|b| b.min(100))
+    }
+}
+
+fn bt_connected() -> Option<Vec<String>> {
+    use windows::Devices::Bluetooth::{BluetoothConnectionStatus, BluetoothDevice};
+    use windows::Devices::Enumeration::DeviceInformation;
+    let sel =
+        BluetoothDevice::GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus::Connected)
+            .ok()?;
+    let list = DeviceInformation::FindAllAsyncAqsFilter(&sel).ok()?.join().ok()?;
+    let mut names = Vec::new();
+    for i in 0..list.Size().ok()? {
+        if let Ok(n) = list.GetAt(i).and_then(|d| d.Name()) {
+            let n = n.to_string();
+            if !n.is_empty() {
+                names.push(n);
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    Some(names)
+}
+
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
         com_init();
@@ -151,6 +261,9 @@ pub fn start(app: AppHandle) {
             .map(|(dev, _)| device_name(dev))
             .unwrap_or_default();
         let mut cached_net = current_net();
+        let mut bright = Brightness { svc: None, dead: false };
+        let mut prev_bright: Option<u32> = None;
+        let mut bt_prev: Option<Vec<String>> = None;
         let mut iter: u64 = 0;
         let mut prev: Option<Snap> = None;
         loop {
@@ -165,6 +278,39 @@ pub fn start(app: AppHandle) {
             }
             if iter % 10 == 0 {
                 cached_net = current_net();
+            }
+            if iter % 3 == 0 {
+                let now = bright.read();
+                if let (Some(a), Some(b)) = (prev_bright, now) {
+                    if a != b {
+                        let _ = app.emit(
+                            "hud",
+                            serde_json::json!({ "kind": "brightness", "value": b }),
+                        );
+                    }
+                }
+                if now.is_some() {
+                    prev_bright = now;
+                }
+            }
+            if iter % 25 == 0 {
+                if let Some(now) = bt_connected() {
+                    if let Some(old) = &bt_prev {
+                        for n in now.iter().filter(|n| !old.contains(n)) {
+                            let _ = app.emit(
+                                "hud",
+                                serde_json::json!({ "kind": "bt", "name": n, "on": true }),
+                            );
+                        }
+                        for n in old.iter().filter(|n| !now.contains(n)) {
+                            let _ = app.emit(
+                                "hud",
+                                serde_json::json!({ "kind": "bt", "name": n, "on": false }),
+                            );
+                        }
+                    }
+                    bt_prev = Some(now);
+                }
             }
             let lang = current_lang();
             let s = snapshot(

@@ -8,8 +8,11 @@ use tauri::{AppHandle, Emitter, Manager};
 static RECT: Mutex<(f64, f64, f64, f64)> = Mutex::new((80.0, 0.0, 360.0, 76.0));
 static HOVERING: Mutex<bool> = Mutex::new(false);
 static PREV_FG: Mutex<isize> = Mutex::new(0);
+/// Previous (larger) rect kept briefly after a shrink so a pointer left in the vacated area
+/// does not close the panel.
+static GRACE: Mutex<Option<((f64, f64, f64, f64), std::time::Instant)>> = Mutex::new(None);
 
-const PAD_IN: f64 = 18.0;
+const PAD_IN: f64 = 28.0;
 const PAD_OUT: f64 = 6.0;
 const WIN_W: f64 = 640.0;
 const WIN_H: f64 = 460.0;
@@ -269,7 +272,17 @@ fn hover_loop(app: AppHandle) {
         let near = |pad: f64| {
             cx >= rx - pad && cx <= rx + rw + pad && cy >= ry - pad && cy <= ry + rh + pad
         };
-        let inside_rect = if hovering { near(PAD_IN) } else { near(PAD_OUT) };
+        let in_grace = hovering
+            && match *GRACE.lock().unwrap() {
+                Some(((gx, gy, gw, gh), until)) if std::time::Instant::now() < until => {
+                    cx >= gx - PAD_IN
+                        && cx <= gx + gw + PAD_IN
+                        && cy >= gy - PAD_IN
+                        && cy <= gy + gh + PAD_IN
+                }
+                _ => false,
+            };
+        let inside_rect = if hovering { near(PAD_IN) || in_grace } else { near(PAD_OUT) };
 
         let lbtn = lbutton_down();
         if lbtn && !prev_lbtn {
@@ -280,6 +293,8 @@ fn hover_loop(app: AppHandle) {
         }
         prev_lbtn = lbtn;
         let dragging = lbtn && press_outside;
+        // A press that started inside (text selection, scrollbar, seek drag) keeps the panel open.
+        let held_inside = lbtn && !press_outside && hovering;
 
         if dragging {
             catcher_release = None;
@@ -320,7 +335,7 @@ fn hover_loop(app: AppHandle) {
             dwell >= 16 // ~256 ms
         } else {
             dwell = 0;
-            inside_rect
+            inside_rect || held_inside
         };
 
         {
@@ -344,7 +359,11 @@ fn hover_loop(app: AppHandle) {
 pub fn set_rect(w: f64, h: f64) {
     let w = w.clamp(60.0, WIN_W);
     let h = h.clamp(24.0, WIN_H);
-    *RECT.lock().unwrap() = ((WIN_W - w) / 2.0, 0.0, w, h);
+    let mut r = RECT.lock().unwrap();
+    if h < r.3 {
+        *GRACE.lock().unwrap() = Some((*r, std::time::Instant::now() + Duration::from_millis(900)));
+    }
+    *r = ((WIN_W - w) / 2.0, 0.0, w, h);
 }
 
 #[cfg(windows)]

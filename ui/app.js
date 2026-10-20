@@ -52,6 +52,7 @@
   const fPhase = $('#fPhase');
   const fCount = $('#fCount');
   const fStart = $('#fStart');
+  const fMin = $('#fMin');
 
   const todoIn = $('#todoIn');
   const todoList = $('#todoList');
@@ -116,7 +117,9 @@
     chat: [500, 430],
   };
 
-  const POMODORO = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 };
+  const focusDur = Object.assign({ focus: 25, short: 5, long: 15 }, load('blip.focusDur', {}));
+  function phaseSecs(ph) { return Math.round((focusDur[ph] || 25) * 60); }
+  const FOCUS_NAME = { focus: 'Fokus', short: 'Istirahat', long: 'Panjang' };
   const PHASE_LABEL = { focus: 'Fokus', short: 'Istirahat', long: 'Istirahat panjang' };
 
   const HUD_ICONS = {
@@ -128,6 +131,8 @@
     keyboard: '<rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M17 13h.01M10 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     wifi: '<path d="M12 18h.01M5 11a10 10 0 0 1 14 0M8.5 14.5a5 5 0 0 1 7 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     headphone: '<path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14a2 2 0 0 0 2 2h1v-4H6a2 2 0 0 0-2 2zM20 14a2 2 0 0 1-2 2h-1v-4h1a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+    sun: '<circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    bt: '<path d="m7 7 10 10-5 4V3l5 4L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   };
   const FOLDER_SVG = '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>';
   const IMAGE_SVG = '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="m4 17 5-5 4 4 3-2 4 4"/>';
@@ -176,6 +181,9 @@
   let eyesTimer = 0;
   let focusOnOpen = false;
   let pageSwipe = null;
+  let pageChangedAt = 0;
+  let hudKind = '';
+  let hudDrag = false;
   let gazeRaf = 0;
 
   document.addEventListener('pointerdown', ev => {
@@ -191,12 +199,12 @@
   let timerHandle = 0;
 
   const focus = Object.assign(
-    { phase: 'focus', runningUntil: null, remaining: POMODORO.focus, count: 0 },
+    { phase: 'focus', runningUntil: null, remaining: phaseSecs('focus'), count: 0 },
     load('blip.focus', {})
   );
   if (focus.runningUntil && focus.runningUntil <= Date.now()) {
     focus.runningUntil = null;
-    focus.remaining = POMODORO[focus.phase] || POMODORO.focus;
+    focus.remaining = phaseSecs(focus.phase);
   }
 
   let todos = load('blip.todos', []);
@@ -408,6 +416,7 @@
     }
 
     page = id;
+    pageChangedAt = Date.now();
     body.dataset.page = id;
     save('blip.page', id);
     if (state === 'open') {
@@ -458,7 +467,7 @@
       setTitle('Blip', '');
     }
     if (top && top.kind === 'focus' && focus.runningUntil) {
-      const total = POMODORO[focus.phase] || 1;
+      const total = phaseSecs(focus.phase) || 1;
       liveRing.style.setProperty('--p', ((1 - focusLeft() / total) * 100).toFixed(1));
     }
   }
@@ -540,11 +549,17 @@
     if (page === 'chat' && (pending || listening)) return true;
     if (page === 'chat' && active === input && input.value.trim()) return true;
     if (page === 'todo' && active === todoIn && todoIn.value.trim()) return true;
+    if (page === 'focus' && active === fMin) return true;
     return false;
   }
 
   function maybeClose() {
     if (state !== 'open' || hover || inputBusy() || pinned || dragging || draggingOut) return;
+    if (Date.now() - pageChangedAt < 700) {
+      clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(maybeClose, 700);
+      return;
+    }
     if (page === 'chat' || page === 'todo') invoke('release_focus').catch(() => {});
     go(topActivity() ? 'live' : 'idle');
   }
@@ -558,7 +573,9 @@
         body.classList.add('wake');
         setTimeout(() => body.classList.remove('wake'), 600);
       }
-      if (['idle', 'live', 'hud', 'answer', 'alert', 'thinking'].includes(state)) {
+      if (state === 'hud' && (hudKind === 'volume' || hudKind === 'brightness')) {
+        clearTimeout(hudTimer);
+      } else if (['idle', 'live', 'hud', 'answer', 'alert', 'thinking'].includes(state)) {
         clearTimeout(openTimer);
         openTimer = setTimeout(() => openNotch(), 70);
       }
@@ -567,9 +584,11 @@
       }
     } else {
       clearTimeout(openTimer);
-      if (state === 'open') {
+      if (state === 'hud' && (hudKind === 'volume' || hudKind === 'brightness')) {
+        hudTimer = setTimeout(hudDone, 1200);
+      } else if (state === 'open') {
         clearTimeout(leaveTimer);
-        leaveTimer = setTimeout(maybeClose, 300);
+        leaveTimer = setTimeout(maybeClose, 450);
       } else if (state === 'alert') {
         clearTimeout(collapseTimer);
         collapseTimer = setTimeout(() => {
@@ -1118,6 +1137,7 @@
 
   function applyLyrics(res) {
     lrcLines = res && res.synced ? parseLrc(res.synced) : [];
+    body.classList.toggle('has-lyrics', lrcLines.length > 0);
     lyrList.textContent = '';
     lastLrc = -2;
     const lines = lrcLines.length
@@ -1161,13 +1181,18 @@
 
   function renderFocus() {
     const left = focusLeft();
-    const total = POMODORO[focus.phase] || POMODORO.focus;
+    const total = phaseSecs(focus.phase) || 1;
     const p = Math.max(0, Math.min(100, (1 - left / total) * 100));
     fRing.style.setProperty('--p', p.toFixed(1));
     fTime.textContent = fmt(left);
     fPhase.textContent = PHASE_LABEL[focus.phase] || 'Fokus';
     fCount.textContent = 'sesi ' + Math.min(focus.count + 1, 4) + '/4';
     fStart.textContent = focus.runningUntil ? 'Jeda' : left < total ? 'Lanjut' : 'Mulai';
+    if (document.activeElement !== fMin) fMin.value = focusDur[focus.phase];
+    $('#fdur').classList.toggle('off', !!focus.runningUntil);
+    document.querySelectorAll('.chips button[data-ph]').forEach(b => {
+      b.textContent = FOCUS_NAME[b.dataset.ph] + ' ' + focusDur[b.dataset.ph];
+    });
     body.classList.toggle('focusing', !!focus.runningUntil);
     if (focus.runningUntil) liveRing.style.setProperty('--p', p.toFixed(1));
 
@@ -1181,7 +1206,7 @@
       const ph = b.dataset.ph;
       focus.phase = ph;
       focus.runningUntil = null;
-      focus.remaining = POMODORO[ph];
+      focus.remaining = phaseSecs(ph);
       saveFocus();
       renderFocus();
       if (state === 'live') updateActivityRow();
@@ -1190,7 +1215,7 @@
 
   function focusStart() {
     if (focus.runningUntil) return;
-    if (focus.remaining <= 0) focus.remaining = POMODORO[focus.phase];
+    if (focus.remaining <= 0) focus.remaining = phaseSecs(focus.phase);
     focus.runningUntil = Date.now() + focus.remaining * 1000;
     saveFocus();
     renderFocus();
@@ -1208,7 +1233,7 @@
 
   function focusReset() {
     focus.runningUntil = null;
-    focus.remaining = POMODORO[focus.phase];
+    focus.remaining = phaseSecs(focus.phase);
     saveFocus();
     renderFocus();
     if (state === 'live') updateActivityRow();
@@ -1223,7 +1248,7 @@
     } else {
       focus.phase = 'focus';
     }
-    focus.remaining = POMODORO[focus.phase];
+    focus.remaining = phaseSecs(focus.phase);
     saveFocus();
     invoke('beep').catch(() => {});
     alertState(was === 'focus' ? 'waktunya istirahat' : 'waktunya fokus', 5000, 'ok');
@@ -1235,6 +1260,26 @@
     focus.remaining = 0;
     completeFocus();
   }
+
+  function setFocusDur(v) {
+    v = Math.round(Number(v));
+    if (!Number.isFinite(v) || focus.runningUntil) return renderFocus();
+    v = Math.max(1, Math.min(120, v));
+    focusDur[focus.phase] = v;
+    save('blip.focusDur', focusDur);
+    focus.remaining = phaseSecs(focus.phase);
+    saveFocus();
+    renderFocus();
+    if (state === 'live') updateActivityRow();
+  }
+  $('#fMinus').addEventListener('click', () => setFocusDur(focusDur[focus.phase] - 5));
+  $('#fPlus').addEventListener('click', () => setFocusDur(focusDur[focus.phase] + 5));
+  fMin.addEventListener('change', () => setFocusDur(fMin.value));
+  fMin.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') fMin.blur();
+  });
+  fMin.addEventListener('pointerdown', () => invoke('focus_input').catch(() => {}));
+  fMin.addEventListener('blur', () => invoke('release_focus').catch(() => {}));
 
   fStart.addEventListener('click', () => (focus.runningUntil ? focusStop() : focusStart()));
   $('#fReset').addEventListener('click', focusReset);
@@ -1284,7 +1329,7 @@
     if (!todos.length) {
       const e = document.createElement('div');
       e.className = 'empty';
-      e.textContent = 'Belum ada tugas.';
+      e.textContent = 'Catat hal kecil. Tambah jam dengan @14:30 — Blip mengingatkan di notch saat waktunya.';
       todoList.appendChild(e);
       return;
     }
@@ -1630,7 +1675,7 @@
 
   listen('shelf:drag-end', () => {
     draggingOut = false;
-    if (!hover) leaveTimer = setTimeout(maybeClose, 300);
+    if (!hover) leaveTimer = setTimeout(maybeClose, 450);
   });
 
   listen('drag-near', e => {
@@ -1675,8 +1720,48 @@
   });
 
   // ---------- system HUD ----------
+  function hudDone() {
+    if (state === 'hud') go(topActivity() ? 'live' : 'idle');
+  }
+
+  function setVolume(level) {
+    level = Math.max(0, Math.min(100, Math.round(level)));
+    hudBar.style.width = level + '%';
+    hudVal.textContent = level + '%';
+    invoke('volume', { dir: 'set', level }).catch(() => {});
+  }
+
+  const hudWrap = $('#hudBarWrap');
+  function hudLevel(ev) {
+    const r = hudWrap.getBoundingClientRect();
+    return ((ev.clientX - r.left) / r.width) * 100;
+  }
+  hudWrap.addEventListener('pointerdown', ev => {
+    if (hudKind !== 'volume') return;
+    hudDrag = true;
+    hudWrap.setPointerCapture(ev.pointerId);
+    hudBar.style.transition = 'none';
+    setVolume(hudLevel(ev));
+  });
+  hudWrap.addEventListener('pointermove', ev => {
+    if (hudDrag) setVolume(hudLevel(ev));
+  });
+  const hudUp = () => {
+    hudDrag = false;
+    hudBar.style.transition = '';
+  };
+  hudWrap.addEventListener('pointerup', hudUp);
+  hudWrap.addEventListener('pointercancel', hudUp);
+  hudEl.addEventListener('wheel', ev => {
+    if (hudKind !== 'volume') return;
+    ev.preventDefault();
+    invoke('volume', { dir: ev.deltaY < 0 ? 'up' : 'down', steps: 1 }).catch(() => {});
+  }, { passive: false });
+
   function showHud(p) {
+    if (hudDrag && p.kind === 'volume') return;
     if (!['idle', 'live', 'hud'].includes(state)) return;
+    hudKind = p.kind;
     let icon = 'speaker';
     let label = '';
     let val = '';
@@ -1720,6 +1805,16 @@
       label = p.name || 'Perangkat audio';
       val = 'Output';
       nobar = true;
+    } else if (p.kind === 'brightness') {
+      icon = 'sun';
+      label = 'Kecerahan';
+      val = p.value + '%';
+      bar = p.value;
+    } else if (p.kind === 'bt') {
+      icon = /headphone|headset|buds|airpods|earbud/i.test(p.name || '') ? 'headphone' : 'bt';
+      label = p.name || 'Bluetooth';
+      val = p.on ? 'Terhubung' : 'Terputus';
+      nobar = true;
     }
     hudIcon.innerHTML = HUD_ICONS[icon] || '';
     hudLabel.textContent = label;
@@ -1730,9 +1825,7 @@
     hudBar.style.width = (bar == null ? 0 : Math.max(0, Math.min(100, bar))) + '%';
     go('hud');
     clearTimeout(hudTimer);
-    hudTimer = setTimeout(() => {
-      if (state === 'hud') go(topActivity() ? 'live' : 'idle');
-    }, 1600);
+    hudTimer = setTimeout(hudDone, hover && (p.kind === 'volume' || p.kind === 'brightness') ? 1200 : 1600);
   }
 
   listen('hud', e => showHud(e.payload));
