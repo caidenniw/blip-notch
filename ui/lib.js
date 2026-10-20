@@ -198,6 +198,21 @@ function fmtSize(n) {
   return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + ' ' + units[i];
 }
 
+function fileKind(ext, dir) {
+  if (dir) return 'folder';
+  const value = String(ext || '').toLowerCase().replace(/^\./, '');
+  if (/^(jpe?g|png|gif|webp|bmp|svg|heic)$/.test(value)) return 'image';
+  if (value === 'pdf') return 'pdf';
+  if (/^(doc|docx|odt|rtf)$/.test(value)) return 'word';
+  if (/^(xls|xlsx|csv|ods)$/.test(value)) return 'sheet';
+  if (/^(ppt|pptx|odp)$/.test(value)) return 'slides';
+  if (/^(zip|rar|7z|tar|gz)$/.test(value)) return 'archive';
+  if (/^(mp3|wav|flac|m4a|ogg)$/.test(value)) return 'audio';
+  if (/^(mp4|mkv|avi|mov|webm)$/.test(value)) return 'video';
+  if (/^(js|ts|tsx|jsx|py|rs|json|html|css|md|txt)$/.test(value)) return 'code';
+  return 'file';
+}
+
 // RGBA pixels → mean [r,g,b], skipping translucent, near-black and near-white pixels; null if none.
 function avgColor(data) {
   let r = 0;
@@ -225,6 +240,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     parseTimer, fmt, fmtTrack, trackPos, APPS, parseIntent, INTENT_LABEL,
     normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
-    avgColor,
+    avgColor, fileKind,
   };
 }

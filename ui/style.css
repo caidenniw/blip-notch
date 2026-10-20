@@ -150,30 +150,34 @@ body[data-state="answer"] .row { padding: 0 20px; }
 
 /* ---------- mata ---------- */
 .eyes {
+  --pupil-x: 0px;
+  --pupil-y: 0px;
+  --eye-expression: scaleY(1);
   display: flex; gap: 14px; height: 100%; align-items: center; justify-content: center;
   transition: transform 90ms linear;
 }
 .eye {
   width: 9.5px; height: 14px; border-radius: 50%; background: #fff;
   box-shadow: 0 0 6px 1px rgba(120,190,255,.6), 0 0 14px 4px rgba(80,140,255,.28);
+  transform: translate(var(--pupil-x), var(--pupil-y)) var(--eye-expression);
   transition: transform .22s ease, background .3s, box-shadow .3s;
 }
 body:not([data-state="idle"]) .eyes { gap: 10px; flex: 0 0 28px; }
 body:not([data-state="idle"]) .eye { width: 8px; height: 11.5px; }
-body[data-state="thinking"] .eye { transform: scaleY(.45) translateY(-2px); }
-body[data-state="listening"] .eye { transform: scaleY(1.15); }
+body[data-state="thinking"] .eyes { --eye-expression: scaleY(.45) translateY(-2px); }
+body[data-state="listening"] .eyes { --eye-expression: scaleY(1.15); }
+body[data-state="listening"] .eye { background: #8ce4ff; }
 body[data-state="alert"]:not([data-tone="ok"]) .eye { background: #ff8f8f; box-shadow: 0 0 6px 1px rgba(255,120,120,.6), 0 0 14px 4px rgba(255,80,80,.3); }
-body.sleepy .eye { transform: scaleY(.18); transition: transform 1.2s ease; }
+body[data-state="alert"][data-tone="ok"] .eyes { animation: okFlash .55s ease; }
+@keyframes okFlash { 50% { filter: drop-shadow(0 0 5px var(--ok)); } }
+body.sleepy .eyes { --eye-expression: scaleY(.18); }
+body.sleepy .eye { transition: transform 1.2s ease; }
 body.wake .eye { animation: wake .6s var(--spring); }
-@keyframes wake {
-  0% { transform: scaleY(.18); }
-  55% { transform: scaleY(1.15); }
-  100% { transform: none; }
-}
+@keyframes wake { 0% { transform: scaleY(.18); } 55% { transform: scaleY(1.15); } 100% { transform: none; } }
 body.talking .eye { animation: talk .22s ease-in-out infinite alternate; }
-@keyframes talk { to { transform: scaleY(.6); } }
+@keyframes talk { to { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.6); } }
 .eye.blink { animation: blink 140ms ease; }
-@keyframes blink { 50% { transform: scaleY(.1); } }
+@keyframes blink { 50% { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.1); } }
 
 /* idle: clock first, then the eyes wake up, then they doze */
 .idle-clock { display: none; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
@@ -262,7 +266,7 @@ body[data-state="open"] .open {
   padding: 6px 22px 0;
   font-size: 12px;
 }
-#pageTitle { font-weight: 600; min-width: 54px; text-align: center; }
+#pageTitle { font-weight: 600; min-width: 54px; }
 .hdr .grow { flex: 1; }
 #clock { font-size: 11px; color: rgba(236, 239, 247, .78); font-variant-numeric: tabular-nums; }
 #batt { display: none; font-size: 10.5px; color: var(--mist); font-variant-numeric: tabular-nums; }
@@ -305,10 +309,34 @@ body[data-state="open"] .open {
 }
 .pg.out-l { transform: translateX(-24px); }
 .pg.out-r { transform: translateX(24px); }
-
-.dots { flex: 0 0 18px; display: flex; align-items: center; justify-content: center; gap: 4px; }
-.dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.22); cursor: pointer; transition: width .25s, background .25s; }
-.dots i.on { width: 14px; border-radius: 3px; background: #fff; }
+.page-nav {
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 18px 7px;
+}
+.page-tab {
+  min-width: 28px;
+  height: 28px;
+  flex: 0 1 32px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--mist);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  transition: flex-grow .2s var(--ease-out), background .16s, color .16s;
+}
+.page-tab:hover { color: var(--ink); background: rgba(255,255,255,.08); }
+.page-tab svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.page-tab span { display: none; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.page-tab.on { flex-grow: 1; color: var(--ink); background: color-mix(in srgb, var(--cyan) 20%, transparent); }
+.page-tab.on span { display: block; }
+.page-tab:focus-visible { outline: 1px solid var(--cyan); outline-offset: 1px; }
 
 .scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
 .scroll::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -504,7 +532,7 @@ body.dropping .zone { border-color: var(--cyan); background: rgba(25,184,255,.08
 .shelf-pg.has .zone { display: none; }
 .shelf-pg.has .slist { display: flex; }
 .card {
-  position: relative; flex: 0 0 74px;
+  position: relative; flex: 0 0 82px;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 8px 4px 6px; border-radius: 12px; border: 1px solid transparent;
   background: rgba(255,255,255,.05); cursor: pointer;
@@ -513,31 +541,20 @@ body.dropping .zone { border-color: var(--cyan); background: rgba(25,184,255,.08
 .card:hover { background: rgba(255,255,255,.1); }
 .card.missing { opacity: .4; border-color: rgba(255,107,107,.4); }
 .card.new { animation: cardPop .4s var(--spring); }
-@keyframes cardPop {
-  from { transform: scale(.8); opacity: .4; }
-  to { transform: none; opacity: 1; }
-}
-.card .ico {
-  width: 26px; height: 26px; border-radius: 7px;
-  display: grid; place-items: center;
-  background: rgba(255,255,255,.08);
-  font-size: 8.5px; font-weight: 700; text-transform: uppercase;
-}
+@keyframes cardPop { from { transform: scale(.8); opacity: .4; } to { transform: none; opacity: 1; } }
+.card .ico { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--mist); font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
 .card .ico svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-.card .nm { font-size: 10px; max-width: 66px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.card .ico.folder { color: #f5ca5b; }.card .ico.pdf { color: #ff6b6b; }.card .ico.word { color: #70a7ff; }.card .ico.sheet { color: #48d58c; }.card .ico.slides { color: #ffac5d; }.card .ico.archive { color: #e5bd65; }.card .ico.audio { color: #b38bff; }.card .ico.video { color: #ff8bb4; }.card .ico.code { color: #5bd9e8; }.card .ico.image { color: var(--cyan); }
+.card .nm { font-size: 10px; max-width: 74px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .card .sz { font-size: 9px; color: var(--mist); }
-.card .acts {
-  position: absolute; top: -6px; right: -4px;
-  display: none; gap: 2px;
-}
-.card:hover .acts { display: flex; }
-.card .acts button {
-  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
-  background: #2a2f3d; color: var(--ink); font-size: 10px; line-height: 1;
-  display: grid; place-items: center; transition: background .14s;
-}
-.card .acts button:hover { background: #40485d; color: #fff; }
-.card .acts button svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2; }
+.card-actions { display: flex; gap: 3px; }
+.card-actions button, .more { width: 19px; height: 19px; padding: 0; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: var(--ink); display: grid; place-items: center; font-size: 12px; line-height: 1; }
+.card-actions button:hover, .more:hover { background: rgba(255,255,255,.2); }
+.more { position: absolute; top: 3px; right: 3px; color: var(--mist); }
+.more-menu { position: absolute; z-index: 2; top: 25px; right: 3px; display: none; min-width: 106px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #1b1f2c; }
+.more-menu.on { display: grid; }
+.more-menu button { border: 0; border-radius: 5px; padding: 5px 7px; background: transparent; color: var(--ink); font-size: 10px; text-align: left; }
+.more-menu button:hover { background: rgba(255,255,255,.1); }
 
 /* ---------- chat ---------- */
 .chat-pg { min-height: 0; }

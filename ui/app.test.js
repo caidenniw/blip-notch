@@ -3,7 +3,7 @@ const { strictEqual, deepStrictEqual } = require('assert');
 const {
   parseTimer, parseIntent, fmt, fmtTrack, trackPos,
   normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
-  avgColor,
+  avgColor, fileKind,
 } = require('./lib.js');
 
 strictEqual(parseTimer('timer 5 menit'), 300);
@@ -101,5 +101,18 @@ strictEqual(fmtSize(0), '0 B');
 deepStrictEqual(avgColor([255, 0, 0, 255, 0, 0, 255, 255]), [128, 0, 128]);
 strictEqual(avgColor([0, 0, 0, 255, 255, 255, 255, 255]), null);
 strictEqual(avgColor([10, 200, 10, 0]), null);
+
+// Shelf file classification
+strictEqual(fileKind('', true), 'folder');
+strictEqual(fileKind('PDF'), 'pdf');
+strictEqual(fileKind('docx'), 'word');
+strictEqual(fileKind('xlsx'), 'sheet');
+strictEqual(fileKind('pptx'), 'slides');
+strictEqual(fileKind('zip'), 'archive');
+strictEqual(fileKind('mp3'), 'audio');
+strictEqual(fileKind('mp4'), 'video');
+strictEqual(fileKind('ts'), 'code');
+strictEqual(fileKind('jpg'), 'image');
+strictEqual(fileKind('bin'), 'file');
 
 console.log('ok');

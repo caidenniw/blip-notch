@@ -22,7 +22,7 @@
   const progFill = $('#progFill');
   const playIcon = $('#playIcon');
   const pageTitle = $('#pageTitle');
-  const dotsEl = $('#dots');
+  const pageNav = $('#pageNav');
   const clockEl = $('#clock');
   const icTime = $('#icTime');
   const icDate = $('#icDate');
@@ -88,6 +88,14 @@
     shelf: 'File',
     chat: 'Obrolan',
   };
+  const PAGE_NAV = {
+    music: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+    focus: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+    todo: '<path d="m5 12 4 4L19 6"/><path d="M5 5h14M5 19h14"/>',
+    water: '<path d="M12 3s6 6.1 6 11a6 6 0 0 1-12 0c0-4.9 6-11 6-11z"/>',
+    shelf: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+  };
 
   const SIZES = {
     idle: [168, 36],
@@ -99,13 +107,13 @@
     thinking: [240, 44],
   };
   const OPEN = {
-    music: [460, 190],
-    lyrics: [620, 190],
-    focus: [460, 176],
-    todo: [460, 232],
-    water: [460, 176],
-    shelf: [460, 176],
-    chat: [500, 392],
+    music: [460, 228],
+    lyrics: [620, 228],
+    focus: [460, 214],
+    todo: [460, 270],
+    water: [460, 214],
+    shelf: [460, 214],
+    chat: [500, 430],
   };
 
   const POMODORO = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 };
@@ -123,6 +131,16 @@
   };
   const FOLDER_SVG = '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>';
   const IMAGE_SVG = '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="m4 17 5-5 4 4 3-2 4 4"/>';
+  const FILE_SVG = {
+    pdf: '<path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M8 15h8M8 18h6"/>',
+    word: '<path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M8 15l2 4 2-4 2 4 2-4"/>',
+    sheet: '<path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M8 12h8M8 16h8M12 9v10"/>',
+    slides: '<rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4M8 8h8"/>',
+    archive: '<path d="M6 3h12v18H6z"/><path d="M9 3v5h6V3M10 12h4M10 16h4"/>',
+    audio: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+    video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
+    code: '<path d="m9 7-5 5 5 5M15 7l5 5-5 5M13 4l-2 16"/>',
+  };
 
   // ---------- persisted state ----------
   function load(key, fallback) {
@@ -157,7 +175,14 @@
   let sleepTimer = 0;
   let eyesTimer = 0;
   let focusOnOpen = false;
+  let pageSwipe = null;
+  let gazeRaf = 0;
 
+  document.addEventListener('pointerdown', ev => {
+    if (!ev.target.closest('.more, .more-menu')) {
+      document.querySelectorAll('.more-menu.on').forEach(menu => menu.classList.remove('on'));
+    }
+  });
   let chatWatch = 0;
   let listenWatch = 0;
   let dictWatch = 0;
@@ -281,6 +306,7 @@
     body.dataset.state = next;
     if (next !== 'alert') delete body.dataset.tone;
     if (next === 'idle') mascot.style.transform = '';
+    else { mascot.style.removeProperty('--pupil-x'); mascot.style.removeProperty('--pupil-y'); }
     armSleep();
 
     if (next === 'open') {
@@ -297,7 +323,7 @@
     if (next === 'answer') requestAnimationFrame(applySize);
     else applySize();
     if (next === 'live' || next === 'idle') applyActivityLabel();
-    renderDots();
+    renderPageNav();
   }
 
   function setTitle(t, d) {
@@ -330,20 +356,24 @@
     });
   }
 
-  function renderDots() {
+  function renderPageNav() {
     const vis = visiblePages();
     if (!vis.includes(page)) {
       setPage(vis.includes('chat') ? 'chat' : vis[0]);
       return;
     }
     body.dataset.page = page;
-    dotsEl.textContent = '';
+    pageNav.textContent = '';
     for (const id of vis) {
-      const d = document.createElement('i');
-      d.dataset.p = id;
-      if (id === page) d.className = 'on';
-      d.addEventListener('click', () => setPage(id));
-      dotsEl.appendChild(d);
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'page-tab' + (id === page ? ' on' : '');
+      tab.title = PAGE_LABEL[id];
+      tab.setAttribute('aria-label', PAGE_LABEL[id]);
+      if (id === page) tab.setAttribute('aria-current', 'page');
+      tab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + PAGE_NAV[id] + '</svg><span>' + PAGE_LABEL[id] + '</span>';
+      tab.addEventListener('click', () => setPage(id));
+      pageNav.appendChild(tab);
     }
     pageTitle.textContent = PAGE_LABEL[page] || '';
   }
@@ -352,7 +382,7 @@
     const vis = visiblePages();
     if (!vis.includes(id)) id = vis.includes('chat') ? 'chat' : vis[0];
     if (!id || id === page) {
-      renderDots();
+      renderPageNav();
       return;
     }
     const was = page;
@@ -390,7 +420,7 @@
       renderPage();
       applySize();
     }
-    renderDots();
+    renderPageNav();
   }
 
   function stepPage(dir) {
@@ -914,7 +944,7 @@
       applySize();
       tickMusic();
     }
-    renderDots();
+    renderPageNav();
   });
 
   function renderMusic() {
@@ -1498,7 +1528,7 @@
 
       let downPt = null;
       card.addEventListener('pointerdown', e => {
-        if (e.target.closest('.acts')) return;
+        if (e.target.closest('.card-actions, .more, .more-menu')) return;
         downPt = { x: e.clientX, y: e.clientY };
       });
       card.addEventListener('pointermove', e => {
@@ -1519,7 +1549,7 @@
       });
 
       card.addEventListener('click', e => {
-        if (e.target.closest('.acts')) return;
+        if (e.target.closest('.card-actions, .more, .more-menu')) return;
         invoke('open_path', { path: it.path }).catch(() => {
           card.classList.add('missing');
           toastShelf('file tidak ditemukan');
@@ -1527,11 +1557,12 @@
       });
 
       const ico = document.createElement('div');
-      ico.className = 'ico';
-      if (it.dir) ico.innerHTML = '<svg viewBox="0 0 24 24">' + FOLDER_SVG + '</svg>';
-      else if (/^(jpe?g|png|gif|webp|bmp|svg)$/.test(it.ext || ''))
-        ico.innerHTML = '<svg viewBox="0 0 24 24">' + IMAGE_SVG + '</svg>';
-      else ico.textContent = (it.ext || 'file').slice(0, 3);
+      const kind = fileKind(it.ext, it.dir);
+      ico.className = 'ico ' + kind;
+      if (kind === 'folder') ico.innerHTML = '<svg viewBox="0 0 24 24">' + FOLDER_SVG + '</svg>';
+      else if (kind === 'image') ico.innerHTML = '<svg viewBox="0 0 24 24">' + IMAGE_SVG + '</svg>';
+      else if (FILE_SVG[kind]) ico.innerHTML = '<svg viewBox="0 0 24 24">' + FILE_SVG[kind] + '</svg>';
+      else ico.textContent = (it.ext || 'file').slice(0, 3).toUpperCase();
 
       const nm = document.createElement('span');
       nm.className = 'nm';
@@ -1542,42 +1573,45 @@
       sz.textContent = it.dir ? 'folder' : fmtSize(it.size);
 
       const acts = document.createElement('div');
-      acts.className = 'acts';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copy';
-      copyBtn.title = 'Salin';
-      copyBtn.innerHTML =
-        '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-      copyBtn.addEventListener('click', ev => {
+      acts.className = 'card-actions';
+      const pasteBtn = document.createElement('button');
+      pasteBtn.title = 'Tempel ke app aktif';
+      pasteBtn.setAttribute('aria-label', pasteBtn.title);
+      pasteBtn.textContent = '↱';
+      pasteBtn.addEventListener('click', ev => {
         ev.stopPropagation();
         invoke('shelf_copy', { paths: [it.path] })
-          .then(() => toastShelf('disalin'))
+          .then(() => invoke('release_focus').catch(() => {}))
+          .then(() => toastShelf('disalin — Ctrl+V untuk tempel'))
           .catch(() => toastShelf('gagal'));
       });
-
-      const revBtn = document.createElement('button');
-      revBtn.className = 'reveal';
-      revBtn.title = 'Buka lokasi';
-      revBtn.innerHTML = '<svg viewBox="0 0 24 24">' + FOLDER_SVG + '</svg>';
-      revBtn.addEventListener('click', ev => {
+      const openBtn = document.createElement('button');
+      openBtn.title = 'Buka file';
+      openBtn.setAttribute('aria-label', openBtn.title);
+      openBtn.textContent = '↗';
+      openBtn.addEventListener('click', ev => {
         ev.stopPropagation();
-        invoke('reveal_path', { path: it.path }).catch(() => toastShelf('gagal'));
+        invoke('open_path', { path: it.path }).catch(() => {
+          card.classList.add('missing');
+          toastShelf('file tidak ditemukan');
+        });
       });
-
-      const x = document.createElement('button');
-      x.className = 'x';
-      x.textContent = '×';
-      x.title = 'Hapus';
-      x.addEventListener('click', ev => {
-        ev.stopPropagation();
-        shelf = shelf.filter(s => s.path !== it.path);
-        saveShelf();
-        renderShelf();
-      });
-
-      acts.append(copyBtn, revBtn, x);
-      card.append(ico, nm, sz, acts);
+      acts.append(pasteBtn, openBtn);
+      const more = document.createElement('button');
+      more.className = 'more';
+      more.textContent = '⋯';
+      more.title = 'Pilihan file';
+      const menu = document.createElement('div');
+      menu.className = 'more-menu';
+      const reveal = document.createElement('button');
+      reveal.textContent = 'Buka lokasi';
+      reveal.addEventListener('click', ev => { ev.stopPropagation(); invoke('reveal_path', { path: it.path }).catch(() => toastShelf('gagal')); });
+      const remove = document.createElement('button');
+      remove.textContent = 'Hapus dari Shelf';
+      remove.addEventListener('click', ev => { ev.stopPropagation(); shelf = shelf.filter(s => s.path !== it.path); saveShelf(); renderShelf(); });
+      menu.append(reveal, remove);
+      more.addEventListener('click', ev => { ev.stopPropagation(); menu.classList.toggle('on'); });
+      card.append(ico, nm, sz, acts, more, menu);
       shelfList.appendChild(card);
     }
   }
@@ -1733,9 +1767,37 @@
     }
   });
 
-  // ---------- navigation ----------
-  $('#prevPage').addEventListener('click', () => stepPage(-1));
-  $('#nextPage').addEventListener('click', () => stepPage(1));
+  function beginPageSwipe(ev) {
+    if (!ev.isPrimary || ev.target.closest('button, input, textarea, a, .pg, .card, .scroll, .prog')) return;
+    pageSwipe = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, lastX: ev.clientX, lastY: ev.clientY, captured: false };
+  }
+
+  function movePageSwipe(ev) {
+    if (!pageSwipe || ev.pointerId !== pageSwipe.id) return;
+    pageSwipe.lastX = ev.clientX;
+    pageSwipe.lastY = ev.clientY;
+    const dx = ev.clientX - pageSwipe.x;
+    if (!pageSwipe.captured && Math.abs(dx) > 12) {
+      ev.currentTarget.setPointerCapture(ev.pointerId);
+      pageSwipe.captured = true;
+    }
+    if (pageSwipe.captured) ev.preventDefault();
+  }
+
+  function endPageSwipe(ev) {
+    if (!pageSwipe || ev.pointerId !== pageSwipe.id) return;
+    const dx = ev.clientX - pageSwipe.x;
+    const dy = ev.clientY - pageSwipe.y;
+    pageSwipe = null;
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.5) stepPage(dx < 0 ? 1 : -1);
+  }
+
+  for (const el of [$('.hdr'), $('.pages'), pageNav]) {
+    el.addEventListener('pointerdown', beginPageSwipe);
+    el.addEventListener('pointermove', movePageSwipe);
+    el.addEventListener('pointerup', endPageSwipe);
+    el.addEventListener('pointercancel', endPageSwipe);
+  }
 
   island.addEventListener(
     'wheel',
@@ -1803,23 +1865,38 @@
   setInterval(tickClock, 15000);
 
   // ---------- blink ----------
+  function blinkEyes(root = mascot) {
+    if (body.classList.contains('sleepy')) return;
+    for (const eye of root.querySelectorAll('.eye')) {
+      eye.classList.add('blink');
+      setTimeout(() => eye.classList.remove('blink'), 140);
+    }
+  }
   (function blink() {
     setTimeout(() => {
-      if (!body.classList.contains('sleepy')) {
-        for (const eye of mascot.querySelectorAll('.eye')) {
-          eye.classList.add('blink');
-          setTimeout(() => eye.classList.remove('blink'), 140);
-        }
-      }
+      blinkEyes();
+      if (state === 'open') blinkEyes($('#miniEyes'));
       blink();
     }, 3000 + Math.random() * 3000);
   })();
+
+  island.addEventListener('pointermove', ev => {
+    if (state !== 'idle' || !body.classList.contains('eyesmode') || gazeRaf) return;
+    gazeRaf = requestAnimationFrame(() => {
+      gazeRaf = 0;
+      const rect = island.getBoundingClientRect();
+      const x = Math.max(-1.5, Math.min(1.5, (ev.clientX - rect.left - rect.width / 2) / Math.max(rect.width, 1) * 3));
+      const y = Math.max(-1.5, Math.min(1.5, (ev.clientY - rect.top - rect.height / 2) / Math.max(rect.height, 1) * 3));
+      mascot.style.setProperty('--pupil-x', x + 'px');
+      mascot.style.setProperty('--pupil-y', y + 'px');
+    });
+  });
 
   // ---------- boot ----------
   body.dataset.page = page;
   markPage();
   applySize();
-  renderDots();
+  renderPageNav();
   renderMusic();
   renderFocus();
   renderTodos();

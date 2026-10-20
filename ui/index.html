@@ -38,9 +38,7 @@
       <div class="open layer">
         <div class="hdr">
           <div class="eyes mini" id="miniEyes"><i class="eye"></i><i class="eye"></i></div>
-          <button class="nav" id="prevPage" title="Sebelumnya" aria-label="Sebelumnya">‹</button>
           <span id="pageTitle">Obrolan</span>
-          <button class="nav" id="nextPage" title="Berikutnya" aria-label="Berikutnya">›</button>
           <span class="grow"></span>
           <button class="nav" id="pinBtn" title="Sematkan" aria-label="Sematkan"><svg viewBox="0 0 24 24"><path d="M16 12V4H8v8l-2 2v2h5v6l1 1 1-1v-6h5v-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
           <span id="batt"></span>
@@ -130,7 +128,7 @@
             </div>
             <div class="zone" id="shelfEmpty">
               <b>Tarik file ke sini</b>
-              <span>atau salin file lalu Ctrl+V · tarik keluar kapan saja</span>
+              <span>Tempel file dari clipboard, atau tarik ke sini</span>
             </div>
             <div class="slist scroll" id="shelfList"></div>
           </section>
@@ -149,7 +147,7 @@
           </section>
         </div>
 
-        <div class="dots" id="dots"></div>
+        <nav class="page-nav" id="pageNav" aria-label="Halaman Blip"></nav>
       </div>
 
       <div class="answer layer" id="answer"></div>
