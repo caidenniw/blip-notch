@@ -17,6 +17,7 @@ impl Default for Router {
             base_url: "http://127.0.0.1:20128/v1".into(),
             api_key: String::new(),
             models: vec![
+                "ollama/gemma4:31b-cloud".into(),
                 "oc/deepseek-v4.1-flash-free".into(),
                 "gemini/gemini-3.1-flash-lite-preview".into(),
                 "cbai/deepseek-v4.1-flash".into(),
