@@ -1,0 +1,6 @@
+node_modules/
+blip.config.json
+*.log
+dist/
+src-tauri/target/
+src-tauri/gen/

@@ -1,0 +1,13 @@
+{
+  "name": "blip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blip - dynamic island AI assistant for Windows",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build --no-bundle"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Blip main window",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
