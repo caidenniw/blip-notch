@@ -1679,11 +1679,11 @@
   listen('drag-near', e => {
     dragging = !!e.payload;
     if (dragging && !draggingOut) {
-      openNotch('shelf');
+      // Dragging a file must land on the File page, whatever page was open.
+      if (state !== 'open' || page !== 'shelf') openNotch('shelf');
       body.classList.add('dropping');
     } else if (!dragging) {
       body.classList.remove('dropping');
-      if (!hover) leaveTimer = setTimeout(maybeClose, 600);
     }
   });
 

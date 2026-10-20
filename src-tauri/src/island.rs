@@ -16,8 +16,6 @@ const PAD_IN: f64 = 28.0;
 const PAD_OUT: f64 = 6.0;
 const WIN_W: f64 = 640.0;
 const WIN_H: f64 = 460.0;
-/// Half-width of the region where the native drop catcher appears while a file is dragged.
-const MAGNET: f64 = 260.0;
 /// Half-width of the top-edge strip that a pointer must dwell on while compact.
 const STRIP: f64 = 100.0;
 
@@ -189,42 +187,13 @@ fn hover_loop(app: AppHandle) {
     let mut compact = false;
     let mut dwell: u32 = 0;
     let mut catcher_on = false;
+    let mut catcher_rect = (0, 0, 0, 0);
+    let mut drag_near = false;
     let mut catcher_release: Option<std::time::Instant> = None;
-    let mut catcher_positioned = false;
     let mut iter: u64 = 0;
     loop {
         std::thread::sleep(Duration::from_millis(16));
         iter += 1;
-        if !catcher_positioned {
-            // Use the primary monitor's full width so no matter where the user drops,
-            // OLE always finds the catcher.  Height 200 physical px covers the notch area.
-            #[cfg(windows)]
-            {
-                use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
-                let Ok(pos) = win.outer_position() else { continue };
-                let scale = win.scale_factor().unwrap_or(1.0);
-                let h_px = (200.0 * scale) as i32;
-                let (sw, sy) = unsafe {
-                    if let Ok(hwnd2) = win.hwnd() {
-                        let hmon = MonitorFromWindow(hwnd2, MONITOR_DEFAULTTOPRIMARY);
-                        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-                        if GetMonitorInfoW(hmon, &mut mi).as_bool() {
-                            let r = &mi.rcMonitor;
-                            ((r.right - r.left) as i32, r.top)
-                        } else { (1920, 0) }
-                    } else { (1920, pos.y) }
-                };
-                dropzone::show(0, sy, sw, h_px);
-                catcher_positioned = true;
-            }
-            #[cfg(not(windows))]
-            {
-                let Ok(pos) = win.outer_position() else { continue };
-                let scale = win.scale_factor().unwrap_or(1.0);
-                dropzone::show(pos.x + ((WIN_W / 2.0 - MAGNET) * scale) as i32, pos.y, (2.0 * MAGNET * scale) as i32, (200.0 * scale) as i32);
-                catcher_positioned = true;
-            }
-        }
 
         if iter % 60 == 0 {
             #[cfg(windows)]
@@ -268,9 +237,16 @@ fn hover_loop(app: AppHandle) {
         }
         if iter % 120 == 0 {
             #[cfg(windows)]
-            assert_topmost(hwnd);
+            {
+                assert_topmost(hwnd);
+                // The drop catcher must stay above the Blip window, otherwise
+                // Explorer hit-tests the webview (which refuses external drops) and
+                // the cursor shows a "prohibited" sign instead of a copy cursor.
+                if catcher_on {
+                    dropzone::raise();
+                }
+            }
         }
-
         let Ok(cursor) = win.cursor_position() else { continue };
         let Ok(pos) = win.outer_position() else { continue };
         let scale = win.scale_factor().unwrap_or(1.0);
@@ -327,14 +303,64 @@ fn hover_loop(app: AppHandle) {
         // A press that started inside (text selection, scrollbar, seek drag) keeps the panel open.
         let held_inside = lbtn && !press_outside && hovering;
 
-        // catcher is always-on; nothing to do here for external OLE drops.
-        // For internal drag-out, the catcher is already visible.
-        if !lbtn {
-            catcher_release = None;
-            catcher_on = false;
+        // Drop catcher: an Explorer file drag must land on a window that accepts
+        // drops. The catcher is an invisible window (alpha 1) parked exactly over the
+        // visible Blip, so every pixel of the notch or the open panel is a legal
+        // drop target. It must stay up for the whole drag and stay above the Blip
+        // window, otherwise Explorer hit-tests the webview and shows a "prohibited"
+        // cursor.
+        // `dragging` (press started outside Blip) keeps a plain click on the panel
+        // from raising the catcher and swallowing the click.
+        let near_blip = cx >= rx - 60.0
+            && cx <= rx + rw + 60.0
+            && cy >= ry - 30.0
+            && cy <= ry + rh + 60.0;
+        if dragging && near_blip && !catcher_on {
+            catcher_on = true;
         }
-        if dragging { catcher_on = true; }
-        let _ = catcher_release;
+        if catcher_on {
+            // Follow the island: the panel grows when it opens, and the pointer must
+            // never leave the drop target mid-drag.
+            let rect = (
+                pos.x + (rx * scale) as i32,
+                pos.y + (ry * scale) as i32,
+                (rw * scale) as i32,
+                (rh * scale) as i32,
+            );
+            if rect != catcher_rect {
+                catcher_rect = rect;
+                dropzone::show(rect.0, rect.1, rect.2, rect.3);
+            }
+            // The Blip window is re-asserted topmost every ~2 s, which would push it
+            // above the catcher; Explorer would then hit-test the webview, which has no
+            // drop target, and show a "prohibited" cursor. Keep the catcher on top.
+            dropzone::raise();
+        }
+        if dragging || dropzone::is_active() {
+            // An OLE drag is in flight: keep the catcher up until the drop lands.
+            catcher_release = None;
+        } else if catcher_on {
+            // The drag is over (no button, no OLE drag): let the UI stop highlighting.
+            let deadline = *catcher_release.get_or_insert_with(|| {
+                std::time::Instant::now() + Duration::from_millis(700)
+            });
+            if std::time::Instant::now() >= deadline {
+                dropzone::hide();
+                catcher_on = false;
+                catcher_release = None;
+                catcher_rect = (0, 0, 0, 0);
+            }
+        }
+        // "A file drag is over Blip": the UI switches to the File page so the drop
+        // lands where the user expects. Owned here because only this loop knows the
+        // mouse state; the OLE catcher only reports actual file drops.
+        if dragging && near_blip && !drag_near {
+            drag_near = true;
+            let _ = app.emit("drag-near", true);
+        } else if !dragging && !dropzone::is_active() && drag_near {
+            drag_near = false;
+            let _ = app.emit("drag-near", false);
+        }
 
         let inside = if compact && !hovering {
             // The notch is a sliver: only a deliberate dwell on the very top edge wakes it,

@@ -12,9 +12,13 @@ use tauri::AppHandle;
 static CATCHER: AtomicIsize = AtomicIsize::new(0);
 /// Pending geometry requested before the catcher window was ready.
 static PENDING: std::sync::Mutex<Option<(i32, i32, i32, i32)>> = std::sync::Mutex::new(None);
+/// True while an OLE drag is over the catcher.
+static ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Window message used to move the catcher from its own thread.
 const MOVE_MSG: u32 = 0x8000 + 1; // WM_APP + 1
+/// Window message used to re-insert the catcher at the top of the z-order.
+const RAISE_MSG: u32 = 0x8000 + 2; // WM_APP + 2
 
 #[cfg(windows)]
 mod imp {
@@ -36,7 +40,8 @@ mod imp {
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW,
         RegisterClassW, SetLayeredWindowAttributes, SetWindowPos, ShowWindowAsync,
-        TranslateMessage, HWND_TOPMOST, LWA_ALPHA, MSG, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
+        TranslateMessage, HWND_TOPMOST, LWA_ALPHA, MSG, SWP_NOMOVE, SWP_NOACTIVATE, SWP_NOSIZE,
+        SWP_SHOWWINDOW, SW_HIDE,
         WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
     };
     use tauri::Emitter;
@@ -73,6 +78,20 @@ mod imp {
             }
             return LRESULT(0);
         }
+        if msg == RAISE_MSG {
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+            return LRESULT(0);
+        }
         unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
     }
 
@@ -80,20 +99,6 @@ mod imp {
     struct Catcher {
         app: AppHandle,
         valid: Cell<bool>,
-    }
-
-    impl Catcher_Impl {
-        /// Hide from our own message thread: hiding while the OLE drag is still unwinding
-        /// (i.e. from the hover poller right after the button release) cancels the drop.
-        fn hide_self(&self) {
-            let raw = CATCHER.load(Ordering::SeqCst);
-            if raw == 0 {
-                return;
-            }
-            unsafe {
-                let _ = ShowWindowAsync(hwnd_from_raw(raw), SW_HIDE);
-            }
-        }
     }
 
     fn file_paths(data: Option<&IDataObject>) -> Vec<String> {
@@ -142,7 +147,7 @@ mod imp {
             self.valid.set(valid);
             if valid {
                 conf::log(&format!("drag masuk {} file", paths.len()));
-                let _ = self.app.emit("drag-near", true);
+                ACTIVE.store(true, Ordering::SeqCst);
             }
             unsafe {
                 *pdweffect = if valid {
@@ -171,13 +176,13 @@ mod imp {
         }
 
         fn DragLeave(&self) -> windows::core::Result<()> {
-            if self.valid.get() {
-                let _ = self.app.emit("drag-near", false);
-            }
-            self.valid.set(false);
-            self.hide_self();
+            // The pointer left the island. Do NOT hide the window and do NOT clear
+            // `valid`: a drop target that vanishes mid-drag makes OLE cancel the drop,
+            // which showed a "prohibited" cursor and lost the file.
+            ACTIVE.store(false, Ordering::SeqCst);
             Ok(())
         }
+
 
         fn Drop(
             &self,
@@ -187,12 +192,19 @@ mod imp {
             pdweffect: *mut DROPEFFECT,
         ) -> windows::core::Result<()> {
             let paths = file_paths(pdataobj.as_ref());
-            let _ = self.app.emit("shelf:drop", paths.clone());
-            let _ = self.app.emit("drag-near", false);
             conf::log(&format!("drop masuk {} file", paths.len()));
+            let _ = self.app.emit("shelf:drop", paths.clone());
             unsafe { *pdweffect = DROPEFFECT_COPY; }
+            ACTIVE.store(false, Ordering::SeqCst);
             self.valid.set(false);
-            self.hide_self();
+            // The drop landed, so the catcher can go: it is an invisible window that
+            // would otherwise swallow clicks on the panel for a while.
+            let raw = CATCHER.load(Ordering::SeqCst);
+            if raw != 0 {
+                unsafe {
+                    let _ = ShowWindowAsync(hwnd_from_raw(raw), SW_HIDE);
+                }
+            }
             Ok(())
         }
     }
@@ -277,6 +289,28 @@ mod imp {
         }
     }
 
+    /// True while an OLE drag is over the catcher.
+    pub fn is_active() -> bool {
+        ACTIVE.load(Ordering::SeqCst)
+    }
+
+    /// Re-inserts the catcher at the top of the z-order. Goes through the catcher's
+    /// own message thread, because `SetWindowPos` must run there.
+    pub fn raise() {
+        let raw = CATCHER.load(Ordering::SeqCst);
+        if raw == 0 {
+            return;
+        }
+        unsafe {
+            let _ = PostMessageW(
+                Some(hwnd_from_raw(raw)),
+                RAISE_MSG,
+                WPARAM(0),
+                LPARAM(0),
+            );
+        }
+    }
+
     pub fn hide() {
         let raw = CATCHER.load(Ordering::SeqCst);
         if raw == 0 {
@@ -289,11 +323,17 @@ mod imp {
 }
 
 #[cfg(windows)]
-pub use imp::{hide, show, start};
+pub use imp::{hide, is_active, raise, show, start};
 
 #[cfg(not(windows))]
 pub fn start(_app: AppHandle) {}
 #[cfg(not(windows))]
 pub fn show(_x: i32, _y: i32, _w: i32, _h: i32) {}
+#[cfg(not(windows))]
+pub fn is_active() -> bool {
+    false
+}
+#[cfg(not(windows))]
+pub fn raise() {}
 #[cfg(not(windows))]
 pub fn hide() {}
