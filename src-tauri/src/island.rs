@@ -83,6 +83,37 @@ fn lbutton_down() -> bool {
     false
 }
 
+/// True while the foreground thread drags from a file manager. A browser tab drag also
+/// captures the mouse, but its window class is not Explorer's, so only real file drags
+/// wake Blip's File page before the pointer reaches the notch.
+#[cfg(windows)]
+fn explorer_drag() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetAncestor, GetGUIThreadInfo, GA_ROOT, GUITHREADINFO,
+    };
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetGUIThreadInfo(0, &mut info) }.is_err() || info.hwndCapture.0.is_null() {
+        return false;
+    }
+    let root = unsafe { GetAncestor(info.hwndCapture, GA_ROOT) };
+    if root.0.is_null() {
+        return false;
+    }
+    let cls = class_of(root);
+    matches!(
+        cls.as_str(),
+        "CabinetWClass" | "ExploreWClass" | "Progman" | "WorkerW" | "Shell_TrayWnd"
+    )
+}
+
+#[cfg(not(windows))]
+fn explorer_drag() -> bool {
+    false
+}
+
 #[cfg(windows)]
 fn class_of(h: windows::Win32::Foundation::HWND) -> String {
     use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
@@ -126,6 +157,12 @@ fn is_shell(h: windows::Win32::Foundation::HWND) -> bool {
             | "Shell_TrayWnd"
             | "Shell_SecondaryTrayWnd"
             | "Windows.UI.Core.CoreWindow"
+            | "XamlExplorerHostIslandWindow"
+            | "ForegroundStaging"
+            | "MultitaskingViewFrame"
+            | "TaskSwitcherWnd"
+            | "TopLevelWindowForOverflowXamlIsland"
+            | "NotifyIconOverflowWindow"
     )
 }
 
@@ -182,9 +219,12 @@ fn hover_loop(app: AppHandle) {
     let mut last_cursor = (f64::MIN, f64::MIN);
     let mut prev_lbtn = false;
     let mut press_outside = false;
+    let mut press_at = std::time::Instant::now();
+    let mut press_pt = (0.0f64, 0.0f64);
     let mut hidden = false;
     let mut full_hits: u32 = 0;
     let mut compact = false;
+    let mut off_hits: u32 = 0;
     let mut dwell: u32 = 0;
     let mut catcher_on = false;
     let mut catcher_rect = (0, 0, 0, 0);
@@ -206,10 +246,27 @@ fn hover_loop(app: AppHandle) {
                     let _ = win.hide();
                     conf::log("fullscreen: sembunyi");
                     hidden = true;
+                    if catcher_on {
+                        dropzone::hide();
+                        catcher_on = false;
+                        catcher_rect = (0, 0, 0, 0);
+                    }
+                    if drag_near {
+                        drag_near = false;
+                        let _ = app.emit("drag-near", false);
+                    }
                     *HOVERING.lock().unwrap() = false;
                     let _ = app.emit("hover", false);
                 } else if full_hits == 0 && hidden {
-                    let _ = win.show();
+                    {
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            ShowWindowAsync, SW_SHOWNOACTIVATE,
+                        };
+                        unsafe {
+                            let _ = ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+                        }
+                    }
+                    assert_topmost(hwnd);
                     let _ = win.set_ignore_cursor_events(true);
                     conf::log("fullscreen: tampil");
                     hidden = false;
@@ -265,10 +322,24 @@ fn hover_loop(app: AppHandle) {
                         && r.bottom > m.top + 100
                         && r.left < nl
                         && r.right > nr);
-                if touch != compact {
-                    compact = touch;
-                    let _ = app.emit("compact", touch);
-                    conf::log(if touch { "compact: on" } else { "compact: off" });
+                use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+                let fg_is_blip = unsafe { GetForegroundWindow() } == hwnd;
+                if touch {
+                    off_hits = 0;
+                    if !compact {
+                        compact = true;
+                        let _ = app.emit("compact", true);
+                        conf::log("compact: on");
+                    }
+                } else if !fg_is_blip {
+                    // Leave compact only after 3 consecutive misses (~720 ms): window/tab switches
+                    // pass through states where no window touches the notch.
+                    off_hits += 1;
+                    if compact && off_hits >= 3 {
+                        compact = false;
+                        let _ = app.emit("compact", false);
+                        conf::log("compact: off");
+                    }
                 }
             }
         }
@@ -294,14 +365,23 @@ fn hover_loop(app: AppHandle) {
         let lbtn = lbutton_down();
         if lbtn && !prev_lbtn {
             press_outside = !near(PAD_OUT);
+            press_at = std::time::Instant::now();
+            press_pt = (cx, cy);
         }
         if !lbtn {
             press_outside = false;
         }
         prev_lbtn = lbtn;
         let dragging = lbtn && press_outside;
+        // A drag, not a click: held >= 150 ms and moved >= 8 px since the press.
+        let drag_gesture = dragging
+            && press_at.elapsed() >= Duration::from_millis(150)
+            && (cx - press_pt.0).abs() + (cy - press_pt.1).abs() >= 8.0;
         // A press that started inside (text selection, scrollbar, seek drag) keeps the panel open.
         let held_inside = lbtn && !press_outside && hovering;
+        // A real file is being dragged: either a file object is over the catcher window
+        // (OLE DragEnter) or a file manager owns the drag gesture.
+        let filedrag = dropzone::is_active() || (drag_gesture && explorer_drag());
 
         // Drop catcher: an Explorer file drag must land on a window that accepts
         // drops. The catcher is an invisible window (alpha 1) parked exactly over the
@@ -309,23 +389,24 @@ fn hover_loop(app: AppHandle) {
         // drop target. It must stay up for the whole drag and stay above the Blip
         // window, otherwise Explorer hit-tests the webview and shows a "prohibited"
         // cursor.
-        // `dragging` (press started outside Blip) keeps a plain click on the panel
-        // from raising the catcher and swallowing the click.
+        // `drag_gesture` (press started outside Blip, held and moved) keeps a plain click
+        // on the panel from raising the catcher and swallowing the click.
         let near_blip = cx >= rx - 60.0
             && cx <= rx + rw + 60.0
             && cy >= ry - 30.0
             && cy <= ry + rh + 60.0;
-        if dragging && near_blip && !catcher_on {
+        if drag_gesture && near_blip && !catcher_on {
             catcher_on = true;
         }
         if catcher_on {
             // Follow the island: the panel grows when it opens, and the pointer must
             // never leave the drop target mid-drag.
+            let m = (40.0 * scale) as i32; // CATCH_MARGIN 40 logical px
             let rect = (
-                pos.x + (rx * scale) as i32,
+                pos.x + (rx * scale) as i32 - m,
                 pos.y + (ry * scale) as i32,
-                (rw * scale) as i32,
-                (rh * scale) as i32,
+                (rw * scale) as i32 + 2 * m,
+                (rh * scale) as i32 + m,
             );
             if rect != catcher_rect {
                 catcher_rect = rect;
@@ -336,13 +417,13 @@ fn hover_loop(app: AppHandle) {
             // drop target, and show a "prohibited" cursor. Keep the catcher on top.
             dropzone::raise();
         }
-        if dragging || dropzone::is_active() {
+        if dragging || filedrag {
             // An OLE drag is in flight: keep the catcher up until the drop lands.
             catcher_release = None;
         } else if catcher_on {
             // The drag is over (no button, no OLE drag): let the UI stop highlighting.
             let deadline = *catcher_release.get_or_insert_with(|| {
-                std::time::Instant::now() + Duration::from_millis(700)
+                std::time::Instant::now() + Duration::from_millis(250)
             });
             if std::time::Instant::now() >= deadline {
                 dropzone::hide();
@@ -352,14 +433,11 @@ fn hover_loop(app: AppHandle) {
             }
         }
         // "A file drag is over Blip": the UI switches to the File page so the drop
-        // lands where the user expects. Owned here because only this loop knows the
-        // mouse state; the OLE catcher only reports actual file drops.
-        if dragging && near_blip && !drag_near {
-            drag_near = true;
-            let _ = app.emit("drag-near", true);
-        } else if !dragging && !dropzone::is_active() && drag_near {
-            drag_near = false;
-            let _ = app.emit("drag-near", false);
+        // lands where the user expects. Mouse state alone cannot tell a file drag from
+        // a browser tab drag, so `filedrag` needs OLE or a file-manager drag source.
+        if filedrag != drag_near {
+            drag_near = filedrag;
+            let _ = app.emit("drag-near", filedrag);
         }
 
         let inside = if compact && !hovering {
@@ -367,10 +445,10 @@ fn hover_loop(app: AppHandle) {
             // so clicks land in the browser tab underneath.
             let strip = cy <= 3.0 && (cx - WIN_W / 2.0).abs() <= STRIP;
             dwell = if strip { dwell + 1 } else { 0 };
-            dwell >= 16 // ~256 ms
+            dwell >= 16 || filedrag // ~256 ms, or a file drag
         } else {
             dwell = 0;
-            inside_rect || held_inside
+            inside_rect || held_inside || filedrag
         };
 
         {

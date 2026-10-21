@@ -175,6 +175,7 @@
   let answerText = '';
   let openTimer = 0;
   let leaveTimer = 0;
+  let needClose = false;
   let collapseTimer = 0;
   let hudTimer = 0;
   let wheelAt = 0;
@@ -576,12 +577,25 @@
       return;
     }
     if (page === 'chat' || page === 'todo') invoke('release_focus').catch(() => {});
+    needClose = false;
     go(topActivity() ? 'live' : 'idle');
   }
+
+  // Watchdog: an early return above (busy input, drag state, page grace) must not leave
+  // the panel open with the pointer gone. Only panels closed by a hover-out re-check.
+  setInterval(() => {
+    if (!needClose) return;
+    if (state !== 'open' || hover) {
+      needClose = false;
+      return;
+    }
+    maybeClose();
+  }, 1000);
 
   listen('hover', e => {
     hover = !!e.payload;
     if (hover) {
+      needClose = false;
       clearTimeout(leaveTimer);
       if (body.classList.contains('sleepy')) {
         body.classList.remove('sleepy');
@@ -603,6 +617,7 @@
         hudTimer = setTimeout(hudDone, 1200);
       } else if (state === 'open') {
         clearTimeout(leaveTimer);
+        needClose = true;
         leaveTimer = setTimeout(maybeClose, 450);
       } else if (state === 'alert') {
         clearTimeout(collapseTimer);
