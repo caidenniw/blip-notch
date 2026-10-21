@@ -133,6 +133,8 @@ function appName(id) {
 // LRC lines may carry several [mm:ss.xx] tags; repeated tags become repeated rows.
 function parseLrc(text) {
   const out = [];
+  const off = /^\[offset:\s*([+-]?\d+)\s*\]/im.exec(String(text || ''));
+  const shift = off ? Number(off[1]) / 1000 : 0;
   for (const raw of String(text || '').split(/\r?\n/)) {
     const tags = [...raw.matchAll(/\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g)];
     if (!tags.length) continue;
@@ -140,7 +142,8 @@ function parseLrc(text) {
     if (!line) continue;
     for (const m of tags) {
       const frac = m[3] ? Number((m[3] + '00').slice(0, 3)) / 1000 : 0;
-      out.push({ t: Number(m[1]) * 60 + Number(m[2]) + frac, line });
+      const t = Number(m[1]) * 60 + Number(m[2]) + frac;
+      out.push({ t: Math.max(0, t - shift), line });
     }
   }
   out.sort((a, b) => a.t - b.t);

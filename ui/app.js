@@ -46,6 +46,9 @@
   const lyrList = $('#lyrList');
   const lyrStatus = $('#lyrStatus');
   const lyrNote = $('#lyrNote');
+  const lyrOff = $('#lyrOff');
+  const lyrMinus = $('#lyrMinus');
+  const lyrPlus = $('#lyrPlus');
 
   const fRing = $('#fRing');
   const fTime = $('#fTime');
@@ -108,13 +111,13 @@
     thinking: [240, 44],
   };
   const OPEN = {
-    music: [460, 228],
-    lyrics: [620, 228],
-    focus: [460, 214],
-    todo: [460, 270],
-    water: [460, 214],
-    shelf: [460, 214],
-    chat: [500, 430],
+    music: [460, 164],
+    lyrics: [620, 164],
+    focus: [460, 150],
+    todo: [460, 184],
+    water: [460, 150],
+    shelf: [460, 172],
+    chat: [500, 340],
   };
 
   const focusDur = Object.assign({ focus: 25, short: 5, long: 15 }, load('blip.focusDur', {}));
@@ -220,12 +223,23 @@
   if (!Array.isArray(shelf)) shelf = [];
 
   // Lyrics state: status is idle|loading|synced|plain|none|error
-  const lyr = { key: '', status: 'idle', hidden: '' };
+  const lyr = { key: '', status: 'idle', hidden: '', dur: 0 };
   const lyricCache = new Map();
   let lrcLines = [];
   let lastLrc = -2;
   let lyrTimer = 0;
   let artSrc = '';
+
+  const lyrOffs = load('blip.lyrOff', {});
+  function lyrShift() { return lyrOffs[lyr.key] || 0; }
+  function lyrPos(m) { return trackPos(m, Date.now()) + lyrShift(); }
+  function setLyrShift(v) {
+    v = Math.max(-10, Math.min(10, Math.round(v * 2) / 2));
+    if (v) lyrOffs[lyr.key] = v; else delete lyrOffs[lyr.key];
+    const ks = Object.keys(lyrOffs); if (ks.length > 200) delete lyrOffs[ks[0]];
+    save('blip.lyrOff', lyrOffs); renderLyrShift(); lastLrc = -2; tickLyrics();
+  }
+  function renderLyrShift() { const v = lyrShift(); if (lyrOff) lyrOff.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + 's'; }
 
   function lyricsVisible() {
     return !!(
@@ -375,6 +389,7 @@
     for (const id of vis) {
       const tab = document.createElement('button');
       tab.type = 'button';
+      tab.dataset.p = id;
       tab.className = 'page-tab' + (id === page ? ' on' : '');
       tab.title = PAGE_LABEL[id];
       tab.setAttribute('aria-label', PAGE_LABEL[id]);
@@ -407,10 +422,10 @@
       oldEl.classList.remove('cur');
       setTimeout(() => {
         oldEl.classList.remove('out-l', 'out-r');
-      }, 320);
+      }, 380);
     }
     if (newEl) {
-      newEl.style.setProperty('--dx', (dir > 0 ? 24 : -24) + 'px');
+      newEl.style.setProperty('--dx', (dir > 0 ? 18 : -18) + 'px');
       void newEl.offsetWidth;
       newEl.classList.add('cur');
     }
@@ -459,7 +474,7 @@
       let detail = top.detail;
       if (top.kind === 'music' && lrcLines.length) {
         const m = activities.media;
-        const idx = m ? lrcIndex(lrcLines, trackPos(m, Date.now())) : -1;
+        const idx = m ? lrcIndex(lrcLines, lyrPos(m)) : -1;
         detail = idx >= 0 && lrcLines[idx] ? lrcLines[idx].line : top.detail || '';
       }
       setTitle(top.title, detail);
@@ -938,14 +953,35 @@
   // ---------- music ----------
   listen('media', e => {
     const m = e.payload;
-    const prevTrack = activities.media
-      ? activities.media.title + '|' + activities.media.artist + '|' + (activities.media.app || '')
+    const at = m.ts && Math.abs(m.ts - Date.now()) < 5000 ? m.ts : Date.now();
+    const prev = activities.media;
+    if (
+      prev &&
+      m.title &&
+      prev.title + '|' + prev.artist + '|' + (prev.app || '') === m.title + '|' + m.artist + '|' + (m.app || '') &&
+      m.playing === prev.playing &&
+      !('art' in m)
+    ) {
+      if (Math.abs(m.position - trackPos(prev, at)) > 0.2) {
+        prev.position = m.position;
+        prev.at = at;
+      }
+      if (m.duration) prev.duration = m.duration;
+      if (lyr.key && lyr.dur && m.duration && Math.abs(m.duration - lyr.dur) > 2) {
+        lyricCache.delete(lyr.key);
+        fetchLyrics();
+      }
+      tickMusic();
+      return;
+    }
+    const prevTrack = prev
+      ? prev.title + '|' + prev.artist + '|' + (prev.app || '')
       : '';
     if (!m.title && !m.playing) {
       activities.media = null;
     } else {
-      const art = 'art' in m ? m.art : (activities.media && activities.media.art) || null;
-      activities.media = Object.assign({}, m, { art, at: Date.now() });
+      const art = 'art' in m ? m.art : (prev && prev.art) || null;
+      activities.media = Object.assign({}, m, { art, at });
     }
     const newTrack = activities.media
       ? activities.media.title + '|' + activities.media.artist + '|' + (activities.media.app || '')
@@ -1022,6 +1058,9 @@
   }
 
   setInterval(tickMusic, 250);
+  setInterval(() => {
+    if ((state === 'open' && page === 'music') || state === 'live') tickLyrics();
+  }, 100);
 
   progEl.addEventListener('click', ev => {
     ev.stopPropagation();
@@ -1071,6 +1110,7 @@
       const res = lyricCache.get(key);
       lyr.key = key;
       lyr.status = res && res.synced ? 'synced' : res && res.plain ? 'plain' : 'none';
+      lyr.dur = (res && res.dur) || 0;
       applyLyrics(res);
       syncLyrClass();
       if (state === 'open' || state === 'live') applySize();
@@ -1086,9 +1126,10 @@
     const title = p.track;
     const artist = p.artist;
     const duration = m.duration || 0;
+    lyr.dur = duration;
     invoke('lyrics', { title, artist, duration })
       .then(res => {
-        lyricCache.set(key, res);
+        lyricCache.set(key, Object.assign({}, res, { dur: duration }));
         if (lyricCache.size > 60) {
           lyricCache.delete(lyricCache.keys().next().value);
         }
@@ -1114,9 +1155,12 @@
     lyrBtn.classList.toggle('loading', lyr.status === 'loading');
     if (lyr.status === 'loading') lyrNote.textContent = 'mencari lirik…';
     else if (lyr.status === 'none') lyrNote.textContent = 'lirik tidak ditemukan';
+    else if (lyr.status === 'plain')
+      lyrNote.textContent = 'lirik tanpa waktu (tidak tersinkron)';
     else if (lyr.status === 'error')
       lyrNote.textContent = 'lirik gagal dimuat · klik ikon untuk coba lagi';
     else lyrNote.textContent = '';
+    renderLyrShift();
   }
 
   lyrBtn.addEventListener('click', () => {
@@ -1132,6 +1176,10 @@
     syncLyrClass();
     applySize();
   });
+
+  if (lyrMinus) lyrMinus.addEventListener('click', () => setLyrShift(lyrShift() - 0.5));
+  if (lyrPlus) lyrPlus.addEventListener('click', () => setLyrShift(lyrShift() + 0.5));
+  if (lyrOff) lyrOff.addEventListener('dblclick', () => setLyrShift(0));
 
   function applyLyrics(res) {
     lrcLines = res && res.synced ? parseLrc(res.synced) : [];
@@ -1163,13 +1211,21 @@
     if (!lrcLines.length || !lyrList.children.length) return;
     const m = activities.media;
     if (!m) return;
-    const idx = lrcIndex(lrcLines, trackPos(m, Date.now()));
+    const idx = lrcIndex(lrcLines, lyrPos(m));
     if (idx === lastLrc) return;
+    const prevIdx = lastLrc;
     lastLrc = idx;
     for (let i = 0; i < lyrList.children.length; i++) {
       lyrList.children[i].classList.toggle('on', i === idx);
+      lyrList.children[i].dataset.d = Math.min(idx < 0 ? i + 1 : Math.abs(i - idx), 3);
     }
-    if (idx >= 0) lyrList.scrollTo({ top: Math.max(0, idx * 23 - 30), behavior: 'smooth' });
+    if (state === 'live') applyActivityLabel();
+    if (idx >= 0) {
+      lyrList.scrollTo({
+        top: Math.max(0, idx * 23 - (lyrList.clientHeight - 23) / 2),
+        behavior: Math.abs(idx - prevIdx) > 2 ? 'auto' : 'smooth',
+      });
+    }
   }
 
   // ---------- focus ----------
@@ -1565,7 +1621,7 @@
     for (const it of shelf) {
       const card = document.createElement('div');
       card.className = 'card' + (newPaths && newPaths.has(it.path) ? ' new' : '');
-      card.title = it.path;
+      card.title = it.path + (it.dir ? '' : ' · ' + fmtSize(it.size));
       card.draggable = false;
       card.addEventListener('dragstart', e => e.preventDefault());
 
@@ -1611,10 +1667,6 @@
       nm.className = 'nm';
       nm.textContent = it.name || it.path;
 
-      const sz = document.createElement('span');
-      sz.className = 'sz';
-      sz.textContent = it.dir ? 'folder' : fmtSize(it.size);
-
       const acts = document.createElement('div');
       acts.className = 'card-actions';
       const pasteBtn = document.createElement('button');
@@ -1654,7 +1706,7 @@
       remove.addEventListener('click', ev => { ev.stopPropagation(); shelf = shelf.filter(s => s.path !== it.path); saveShelf(); renderShelf(); });
       menu.append(reveal, remove);
       more.addEventListener('click', ev => { ev.stopPropagation(); menu.classList.toggle('on'); });
-      card.append(ico, nm, sz, acts, more, menu);
+      card.append(ico, nm, acts, more, menu);
       shelfList.appendChild(card);
     }
   }

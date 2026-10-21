@@ -21,6 +21,7 @@ mod imp {
         pub position: f64,
         pub duration: f64,
         pub app: String,
+        pub ts: u64,
     }
 
     fn manager() -> Option<GlobalSystemMediaTransportControlsSessionManager> {
@@ -56,10 +57,9 @@ mod imp {
             std::thread::sleep(Duration::from_millis(1000));
             let (info, props) = current();
             let track = format!("{}|{}|{}", info.title, info.artist, info.app);
-            let expected = last_pos + if last_playing { 1.0 } else { 0.0 };
             let new_track = track != last_track;
-            let jumped = (info.position - expected).abs() > 2.0;
-            if new_track || info.playing != last_playing || jumped {
+            let paused_seek = !info.playing && (info.position - last_pos).abs() > 0.5;
+            if info.playing || new_track || info.playing != last_playing || paused_seek {
                 let mut payload = serde_json::json!({
                     "title": info.title,
                     "artist": info.artist,
@@ -67,6 +67,7 @@ mod imp {
                     "position": info.position,
                     "duration": info.duration,
                     "app": info.app,
+                    "ts": info.ts,
                 });
                 if new_track {
                     // ponytail: cover dibaca hanya saat ganti lagu; bila player telat set thumbnail, cover baru muncul di lagu berikutnya.
@@ -88,6 +89,10 @@ mod imp {
         let Some(s) = session() else {
             return (Info::default(), None);
         };
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         let playing = is_playing(&s);
         let tl = s.GetTimelineProperties().ok();
         let mut position = tl
@@ -107,10 +112,7 @@ mod imp {
             .map(|d| d.UniversalTime)
             .unwrap_or(0);
         if playing && duration > 0.0 && last > 0 {
-            let now_ft = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| (d.as_nanos() / 100) as i64 + 116_444_736_000_000_000)
-                .unwrap_or(last);
+            let now_ft = now_ms as i64 * 10_000 + 116_444_736_000_000_000;
             position = (position + (now_ft - last).max(0) as f64 / 1e7).min(duration);
         }
         let props = s
@@ -139,6 +141,7 @@ mod imp {
                 position,
                 duration,
                 app,
+                ts: now_ms,
             },
             props,
         )
@@ -240,6 +243,23 @@ pub fn norm(s: &str) -> String {
 fn contains_each_other(a: &str, b: &str) -> bool {
     !a.is_empty() && !b.is_empty() && (a.contains(b) || b.contains(a))
 }
+pub const SYNC_TOLERANCE_SECS: f64 = 3.0;
+
+pub fn record_lyrics(v: &serde_json::Value, duration: f64) -> (Option<String>, Option<String>) {
+    let text = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let item_dur = v.get("duration").and_then(|x| x.as_f64()).unwrap_or(0.0);
+    let off = item_dur > 0.0 && duration > 0.0 && (item_dur - duration).abs() > SYNC_TOLERANCE_SECS;
+    (
+        if off { None } else { text("syncedLyrics") },
+        text("plainLyrics"),
+    )
+}
 
 pub fn pick_lyrics(
     items: &[serde_json::Value],
@@ -282,7 +302,7 @@ pub fn pick_lyrics(
 
         if let Some(s) = it.get("syncedLyrics").and_then(|v| v.as_str()) {
             let s = s.trim();
-            if !s.is_empty() && diff <= 15.0 {
+            if !s.is_empty() && diff <= SYNC_TOLERANCE_SECS {
                 if best_synced.as_ref().map_or(true, |(d, _)| diff < *d) {
                     best_synced = Some((diff, s.to_string()));
                 }
@@ -337,20 +357,11 @@ pub async fn lyrics(
             any_network = true;
             if resp.status().is_success() {
                 if let Ok(v) = resp.json::<serde_json::Value>().await {
-                    let synced = v
-                        .get("syncedLyrics")
-                        .and_then(|x| x.as_str())
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string);
-                    let plain = v
-                        .get("plainLyrics")
-                        .and_then(|x| x.as_str())
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string);
-                    if synced.is_some() || plain.is_some() {
-                        return Ok(serde_json::json!({ "synced": synced, "plain": plain }));
+                    let (s, p) = record_lyrics(&v, duration);
+                    if s.is_some() {
+                        return Ok(serde_json::json!({ "synced": s, "plain": p }));
+                    } else if p.is_some() {
+                        best_plain = p;
                     }
                 }
             }
@@ -433,23 +444,12 @@ pub async fn lyrics(
             any_network = true;
             if resp.status().is_success() {
                 if let Ok(v) = resp.json::<serde_json::Value>().await {
-                    let synced = v
-                        .get("syncedLyrics")
-                        .and_then(|x| x.as_str())
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string);
-                    let plain = v
-                        .get("plainLyrics")
-                        .and_then(|x| x.as_str())
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string);
-                    if synced.is_some() {
-                        best_synced = synced;
+                    let (s, p) = record_lyrics(&v, duration);
+                    if s.is_some() {
+                        best_synced = s;
                     }
-                    if best_plain.is_none() && plain.is_some() {
-                        best_plain = plain;
+                    if best_plain.is_none() && p.is_some() {
+                        best_plain = p;
                     }
                 }
             }
@@ -547,9 +547,63 @@ mod tests {
             }
         ]);
         let items = items.as_array().unwrap();
-        // target duration 200, item 240 -> diff 40 (> 15). Synced dropped, plain kept.
+        // target duration 200, item 240 -> diff 40 (> 3). Synced dropped, plain kept.
         let (synced, plain) = pick_lyrics(items, "Song", "Band", 200.0);
         assert_eq!(synced, None);
         assert_eq!(plain.as_deref(), Some("plain text"));
+    }
+
+    #[test]
+    fn five_second_diff_plain_only() {
+        let items = serde_json::json!([
+            {
+                "trackName": "Song",
+                "artistName": "Band",
+                "duration": 205.0,
+                "syncedLyrics": "[00:10.00] synced",
+                "plainLyrics": "plain text",
+            }
+        ]);
+        let items = items.as_array().unwrap();
+        let (synced, plain) = pick_lyrics(items, "Song", "Band", 200.0);
+        assert_eq!(synced, None);
+        assert_eq!(plain.as_deref(), Some("plain text"));
+    }
+
+    #[test]
+    fn three_second_diff_still_synced() {
+        let items = serde_json::json!([
+            {
+                "trackName": "Song",
+                "artistName": "Band",
+                "duration": 203.0,
+                "syncedLyrics": "[00:10.00] synced",
+                "plainLyrics": "plain text",
+            }
+        ]);
+        let items = items.as_array().unwrap();
+        let (synced, plain) = pick_lyrics(items, "Song", "Band", 200.0);
+        assert_eq!(synced.as_deref(), Some("[00:10.00] synced"));
+        assert_eq!(plain.as_deref(), Some("plain text"));
+    }
+
+    #[test]
+    fn record_lyrics_drops_synced_on_duration_mismatch() {
+        let mismatch = serde_json::json!({
+            "duration": 240.0,
+            "syncedLyrics": "[00:10.00] synced",
+            "plainLyrics": "plain text",
+        });
+        let (s, p) = record_lyrics(&mismatch, 200.0);
+        assert_eq!(s, None);
+        assert_eq!(p.as_deref(), Some("plain text"));
+
+        let no_dur = serde_json::json!({
+            "syncedLyrics": "[00:10.00] synced",
+            "plainLyrics": "plain text",
+        });
+        let (s2, p2) = record_lyrics(&no_dur, 200.0);
+        assert_eq!(s2.as_deref(), Some("[00:10.00] synced"));
+        assert_eq!(p2.as_deref(), Some("plain text"));
     }
 }

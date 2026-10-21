@@ -53,10 +53,9 @@
                 <div class="meta">
                   <b id="mTitle"></b>
                   <span id="mArtist"></span>
-                  <span class="app" id="mApp"></span>
+                  <span class="app"><span id="mApp"></span><span id="lyrNote"></span></span>
                 </div>
               </div>
-              <span class="lyr-note" id="lyrNote"></span>
               <div class="mbar">
                 <span class="t" id="mPos">0:00</span>
                 <div class="prog" id="prog" title="Geser posisi"><i id="progFill"></i></div>
@@ -67,6 +66,7 @@
                 <button data-cmd="prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24"><path d="M11 6 3 12l8 6zM21 6l-8 6 8 6z"/></svg></button>
                 <button data-cmd="toggle" aria-label="Putar/Jeda"><svg viewBox="0 0 24 24"><path id="playIcon" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
                 <button data-cmd="next" aria-label="Berikutnya"><svg viewBox="0 0 24 24"><path d="m13 6 8 6-8 6zM3 6l8 6-8 6z"/></svg></button>
+                <span class="lyr-sync" id="lyrSync"><button id="lyrMinus" title="Lirik lebih lambat" aria-label="Lirik lebih lambat">−</button><output id="lyrOff" title="Klik dua kali untuk reset">0.0s</output><button id="lyrPlus" title="Lirik lebih awal" aria-label="Lirik lebih awal">+</button></span>
               </div>
             </div>
             <div class="lyr-wrap">
@@ -78,18 +78,19 @@
           <section class="pg focus-pg" data-p="focus">
             <div class="pring" id="fRing"><div class="pin"><span id="fTime">25:00</span></div></div>
             <div class="fmeta">
-              <b id="fPhase">Fokus</b>
-              <span id="fCount">sesi 1/4</span>
-              <div class="fdur" id="fdur"><button id="fMinus" aria-label="Kurangi 5 menit">−</button><input id="fMin" type="number" min="1" max="120" step="1" aria-label="Menit"/><span>mnt</span><button id="fPlus" aria-label="Tambah 5 menit">+</button></div>
+              <div class="fhead"><b id="fPhase">Fokus</b><span id="fCount">sesi 1/4</span></div>
               <div class="chips">
                 <button data-ph="focus">Fokus 25</button>
                 <button data-ph="short">Istirahat 5</button>
                 <button data-ph="long">Panjang 15</button>
               </div>
-              <div class="fbtns">
-                <button class="pill" id="fStart">Mulai</button>
-                <button class="pill ghost" id="fReset">Reset</button>
-                <button class="pill ghost" id="fSkip">Lewati</button>
+              <div class="frow">
+                <div class="fdur" id="fdur"><button id="fMinus" aria-label="Kurangi 5 menit">−</button><input id="fMin" type="number" min="1" max="120" step="1" aria-label="Menit"/><span>mnt</span><button id="fPlus" aria-label="Tambah 5 menit">+</button></div>
+                <div class="fbtns">
+                  <button class="pill" id="fStart">Mulai</button>
+                  <button class="pill ghost" id="fReset">Reset</button>
+                  <button class="pill ghost" id="fSkip">Lewati</button>
+                </div>
               </div>
             </div>
           </section>

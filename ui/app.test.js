@@ -72,6 +72,7 @@ strictEqual(lrcIndex(lrc, 24), 0);
 strictEqual(lrcIndex(lrc, 10), -1);
 strictEqual(lrcIndex(lrc, 99), 1);
 deepStrictEqual(parseLrc('[00:10.00][00:20.00]chorus'), [{ t: 10, line: 'chorus' }, { t: 20, line: 'chorus' }]);
+deepStrictEqual(parseLrc('[offset:500]\n[00:10.00]a'), [{ t: 9.5, line: 'a' }]);
 
 // todo
 const morning = new Date(2026, 9, 19, 9, 0).getTime();
