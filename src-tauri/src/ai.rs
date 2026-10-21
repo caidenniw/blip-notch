@@ -83,7 +83,7 @@ async fn run_chat(app: AppHandle, id: String, messages: Vec<serde_json::Value>, 
             Ok(_) => {
                 last_err = format!("{model} balas kosong");
                 conf::log(&last_err);
-            }
+            } 
             Err((sent, err)) => {
                 last_err = err;
                 conf::log(&format!("model gagal {model}: {}", last_err.chars().take(140).collect::<String>()));
@@ -137,6 +137,10 @@ async fn stream_once(
     let resp = client
         .post(format!("{base}/chat/completions"))
         .header("Authorization", format!("Bearer {}", conf::router_key()))
+        // 9Router injects its caveman/ponytail coding-agent prompt into every request it
+        // proxies (≈800 extra prompt tokens) and the model then answers like a terse dev.
+        // This header turns that off for Blip's chat only, leaving the user's setup alone.
+        .header("x-9router-token-saver", "off")
         .json(&serde_json::json!({ "model": model, "stream": true, "messages": msgs }))
         .send()
         .await

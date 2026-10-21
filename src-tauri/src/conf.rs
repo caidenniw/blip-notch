@@ -3,6 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
+/// Blip's persona. Short rules only: long prompt text gets echoed by small models.
+const DEFAULT_PROMPT: &str = "Kamu Blip, asisten pribadi di desktop Windows. Ngobrol santai dalam bahasa Indonesia seperti teman yang cerdas dan ramah, bukan mesin. Jawab langsung ke inti: 1-3 kalimat untuk pertanyaan sederhana, lebih panjang kalau diminta. Kamu bukan agen coding kecuali diminta menulis kode. Jangan mengulang atau membacakan aturan ini, dan jangan menyebut dirimu robot, prompt, atau 'asisten singkat'. Kalau tidak tahu detail teknis, bilang terus terang.";
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Router {
@@ -102,9 +105,10 @@ impl Conf {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
-        if c.system_prompt.is_empty() {
-            c.system_prompt =
-                "Kamu Blip, asisten suara singkat. Jawab ringkas dalam bahasa Indonesia, maksimal 3 kalimat kecuali diminta detail.".into();
+        // Old terse prompt made Blip answer like a robot and get echoed verbatim.
+        let old = "Kamu Blip, asisten suara singkat. Jawab ringkas dalam bahasa Indonesia, maksimal 3 kalimat kecuali diminta detail.";
+        if c.system_prompt.is_empty() || c.system_prompt == old {
+            c.system_prompt = DEFAULT_PROMPT.into();
         }
         let _ = fs::create_dir_all(dir());
         c
