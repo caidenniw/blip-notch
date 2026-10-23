@@ -61,7 +61,17 @@ fn fullscreen_app(blip: windows::Win32::Foundation::HWND) -> bool {
         return true;
     }
     match foreground_rect(blip) {
-        Some((r, m)) => r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom,
+        Some((r, m)) => {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, GetWindowLongW, GWL_STYLE, WS_CAPTION,
+            };
+            let fg = unsafe { GetForegroundWindow() };
+            // Maximized normal windows also cover the monitor when the taskbar auto-hides;
+            // true fullscreen (F11, borderless games) has no caption.
+            let titled = (unsafe { GetWindowLongW(fg, GWL_STYLE) } as u32) & WS_CAPTION.0
+                == WS_CAPTION.0;
+            !titled && r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
+        }
         None => false,
     }
 }
@@ -83,11 +93,11 @@ fn lbutton_down() -> bool {
     false
 }
 
-/// True while the foreground thread drags from a file manager. A browser tab drag also
-/// captures the mouse, but its window class is not Explorer's, so only real file drags
-/// wake Blip's File page before the pointer reaches the notch.
+/// True while any app runs an OLE drag (DoDragDrop): the capture window is then OLE's hidden
+/// CLIPBRDWNDCLASS window. Window moves, rubber-band selection and browser tab drags capture
+/// other classes, so they do not match.
 #[cfg(windows)]
-fn explorer_drag() -> bool {
+fn ole_drag() -> bool {
     use windows::Win32::UI::WindowsAndMessaging::{
         GetAncestor, GetGUIThreadInfo, GA_ROOT, GUITHREADINFO,
     };
@@ -103,14 +113,11 @@ fn explorer_drag() -> bool {
         return false;
     }
     let cls = class_of(root);
-    matches!(
-        cls.as_str(),
-        "CabinetWClass" | "ExploreWClass" | "Progman" | "WorkerW" | "Shell_TrayWnd"
-    )
+    cls == "CLIPBRDWNDCLASS"
 }
 
 #[cfg(not(windows))]
-fn explorer_drag() -> bool {
+fn ole_drag() -> bool {
     false
 }
 
@@ -146,6 +153,22 @@ fn assert_topmost(h: windows::Win32::Foundation::HWND) {
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
         );
     }
+}
+
+/// Taskbar, its flyout hosts and the Start/search core window. While one is foreground
+/// (auto-hidden taskbar revealed, tray opened) the previous fullscreen/compact decision holds.
+#[cfg(windows)]
+fn taskbar_foreground() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    matches!(
+        class_of(unsafe { GetForegroundWindow() }).as_str(),
+        "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "TopLevelWindowForOverflowXamlIsland"
+            | "NotifyIconOverflowWindow"
+            | "Windows.UI.Core.CoreWindow"
+            | "XamlExplorerHostIslandWindow"
+    )
 }
 
 #[cfg(windows)]
@@ -241,9 +264,22 @@ fn hover_loop(app: AppHandle) {
                 let full = fullscreen_app(hwnd);
                 // Two consecutive hits (~2 s): a single one is the shell re-laying the desktop
                 // during Win+D, which would otherwise flicker the notch away.
-                full_hits = if full { full_hits + 1 } else { 0 };
+                full_hits = if full {
+                    full_hits + 1
+                } else if taskbar_foreground() {
+                    full_hits
+                } else {
+                    0
+                };
                 if full_hits >= 2 && !hidden {
-                    let _ = win.hide();
+                    // Never win.hide(): restore uses raw ShowWindowAsync, so tao's VISIBLE flag
+                    // would stay false and every set_ignore_cursor_events would SW_HIDE again.
+                    unsafe {
+                        let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(
+                            hwnd,
+                            windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+                        );
+                    }
                     conf::log("fullscreen: sembunyi");
                     hidden = true;
                     if catcher_on {
@@ -331,7 +367,7 @@ fn hover_loop(app: AppHandle) {
                         let _ = app.emit("compact", true);
                         conf::log("compact: on");
                     }
-                } else if !fg_is_blip {
+                } else if !fg_is_blip && !taskbar_foreground() {
                     // Leave compact only after 3 consecutive misses (~720 ms): window/tab switches
                     // pass through states where no window touches the notch.
                     off_hits += 1;
@@ -379,9 +415,10 @@ fn hover_loop(app: AppHandle) {
             && (cx - press_pt.0).abs() + (cy - press_pt.1).abs() >= 8.0;
         // A press that started inside (text selection, scrollbar, seek drag) keeps the panel open.
         let held_inside = lbtn && !press_outside && hovering;
-        // A real file is being dragged: either a file object is over the catcher window
-        // (OLE DragEnter) or a file manager owns the drag gesture.
-        let filedrag = dropzone::is_active() || (drag_gesture && explorer_drag());
+        // A real OLE drag is in flight: the pointer entered the catcher (OLE DragEnter)
+        // or any app owns an OLE drag.
+        let ole = drag_gesture && ole_drag();
+        let filedrag = dropzone::is_active() || ole;
 
         // Drop catcher: an Explorer file drag must land on a window that accepts
         // drops. The catcher is an invisible window (alpha 1) parked exactly over the
@@ -389,13 +426,13 @@ fn hover_loop(app: AppHandle) {
         // drop target. It must stay up for the whole drag and stay above the Blip
         // window, otherwise Explorer hit-tests the webview and shows a "prohibited"
         // cursor.
-        // `drag_gesture` (press started outside Blip, held and moved) keeps a plain click
-        // on the panel from raising the catcher and swallowing the click.
+        // `ole` implies `drag_gesture` (press started outside Blip, held and moved), so a plain
+        // click on the panel never raises the catcher and swallows the click.
         let near_blip = cx >= rx - 60.0
             && cx <= rx + rw + 60.0
             && cy >= ry - 30.0
             && cy <= ry + rh + 60.0;
-        if drag_gesture && near_blip && !catcher_on {
+        if ole && near_blip && !catcher_on {
             catcher_on = true;
         }
         if catcher_on {

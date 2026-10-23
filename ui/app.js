@@ -10,6 +10,11 @@
   const answerEl = $('#answer');
   const messages = $('#messages');
   const input = $('#input');
+  const composerEl = $('.composer');
+  const chatFooterEl = $('.chat-pg .footer');
+  const voiceEl = $('#voice');
+  const vText = $('#vText');
+  const vHint = $('#vHint');
   const titleEl = $('#title');
   const detailEl = $('#detail');
   const wave = $('#wave');
@@ -109,6 +114,7 @@
     alert: [340, 52],
     listening: [320, 60],
     thinking: [240, 44],
+    voice: [260, 132],
   };
   const OPEN = {
     music: [460, 164],
@@ -117,7 +123,7 @@
     todo: [460, 184],
     water: [460, 150],
     shelf: [460, 172],
-    chat: [500, 340],
+    chat: [500, 170],
   };
 
   const focusDur = Object.assign({ focus: 25, short: 5, long: 15 }, load('blip.focusDur', {}));
@@ -181,6 +187,13 @@
   let wheelAt = 0;
   let dictating = false;
   let listening = false;
+  let voice = false;
+  let voicePhase = '';
+  let voiceAnswered = false;
+  let voiceTimer = 0;
+  let ttsEnabled = true;
+  let moodTimer = 0;
+  let lvT = 0;
   let sleepTimer = 0;
   let eyesTimer = 0;
   let focusOnOpen = false;
@@ -285,6 +298,15 @@
     sleepTimer = setTimeout(() => body.classList.add('sleepy'), 28000);
   }
 
+  function chatHeight() {
+    const els = messages.children;
+    const content = els.length
+      ? els[els.length - 1].offsetTop + els[els.length - 1].offsetHeight - els[0].offsetTop + 10
+      : 0;
+    const chrome = 28 + 32 + 10 + composerEl.offsetHeight + 6 + chatFooterEl.offsetHeight;
+    return chatHeightFor(chrome, content);
+  }
+
   function answerHeight() {
     return Math.min(60 + Math.max(answerEl.scrollHeight, 0), 220);
   }
@@ -298,6 +320,7 @@
     let h;
     if (state === 'open') {
       [w, h] = OPEN[page === 'music' && lyricsVisible() ? 'lyrics' : page] || OPEN.chat;
+      if (page === 'chat') h = chatHeight();
     } else if (state === 'answer') {
       w = 460;
       h = answerHeight();
@@ -462,7 +485,7 @@
   }
 
   function updateActivityRow() {
-    if (['listening', 'thinking', 'alert', 'answer', 'open', 'hud'].includes(state)) return;
+    if (['listening', 'thinking', 'alert', 'answer', 'open', 'hud', 'voice'].includes(state)) return;
     const next = topActivity() ? 'live' : 'idle';
     if (next === state) applyActivityLabel();
     else go(next);
@@ -527,9 +550,11 @@
   }
 
   function alertState(text, ms, tone) {
+    if (voice) { flashMood(tone === 'ok' ? 'happy' : 'confused', 1200); return; }
     setTitle(text, '');
     body.dataset.tone = tone || '';
     go('alert');
+    flashMood(tone === 'ok' ? 'happy' : 'confused', tone === 'ok' ? 1300 : 1600);
     clearTimeout(collapseTimer);
     collapseTimer = setTimeout(() => {
       if (state === 'alert') go(topActivity() ? 'live' : 'idle');
@@ -538,6 +563,7 @@
 
   // ---------- hover / open ----------
   function openNotch(force, focusInput) {
+    if (voice) voiceEnd();
     clearTimeout(openTimer);
     focusOnOpen = !!focusInput;
     if (state === 'open') {
@@ -710,7 +736,7 @@
     answerText = '';
     answerEl.textContent = '';
     answerEl.classList.remove('err');
-    if (!open) {
+    if (!open && !voice) {
       setTitle('Blip', 'berpikir...');
       go('thinking');
     }
@@ -719,6 +745,12 @@
     const id = 'a' + Date.now();
     pending = { id, el, text: '' };
 
+    armWatch(id);
+
+    invoke('chat_send', { id, messages: history, speak: ttsOn || voice }).catch(err => onChatError({ id, error: String(err) }));
+  }
+
+  function armWatch(id) {
     clearTimeout(chatWatch);
     chatWatch = setTimeout(() => {
       if (pending && pending.id === id && !pending.text) {
@@ -726,8 +758,6 @@
         onChatError({ id, error: 'waktu habis' });
       }
     }, 45000);
-
-    invoke('chat_send', { id, messages: history, speak: ttsOn }).catch(err => onChatError({ id, error: String(err) }));
   }
 
   listen('chat:chunk', e => {
@@ -736,7 +766,7 @@
     pending.text += e.payload.delta;
     if (pending.el) pending.el.textContent = pending.text;
     messages.scrollTop = messages.scrollHeight;
-    if (state === 'open') return;
+    if (state === 'open' || voice) return;
     answerText = pending.text;
     answerEl.textContent = answerText;
     answerEl.appendChild(caret());
@@ -759,10 +789,16 @@
     history.push({ role: 'assistant', content: text });
     pending = null;
     answerEl.textContent = text;
-    if (e.payload.aborted) {
-      if (text && state !== 'open') go('answer');
+    if (voice && !e.payload.aborted) {
+      voiceAnswered = true;
+      if (!ttsEnabled) voiceNext();
       return;
     }
+    if (e.payload.aborted) {
+      if (text && state !== 'open' && !voice) go('answer');
+      return;
+    }
+    flashMood('happy', 1400);
     if (state === 'open') {
       if (!hover) setTimeout(maybeClose, 1500);
       return;
@@ -776,6 +812,45 @@
     onChatError(e.payload);
   });
 
+  // Tools can run long; the Rust side has its own timeouts, so the no-text watchdog pauses meanwhile.
+  listen('tool:start', e => {
+    if (!pending || e.payload.id !== pending.id) return;
+    clearTimeout(chatWatch);
+    const label = e.payload.label + '...';
+    if (voice) vHint.textContent = label;
+    else if (pending.el && !pending.text) pending.el.textContent = label;
+    if (!voice && state !== 'open' && state !== 'answer') setTitle('Blip', label);
+  });
+  listen('tool:end', e => {
+    if (!pending || e.payload.id !== pending.id) return;
+    armWatch(pending.id);
+    if (voice) vHint.textContent = PHASE_HINT.think;
+  });
+  listen('tool:confirm', e => {
+    if (!pending || e.payload.id !== pending.id) return;
+    clearTimeout(chatWatch);
+    const el = pending.el;
+    if (!el) return;
+    const answer = ok => {
+      invoke('tool_confirm', { call: e.payload.call, ok }).catch(() => {});
+      el.textContent = ok ? 'menjalankan Hermes...' : 'dibatalkan';
+    };
+    const box = document.createElement('div');
+    box.className = 'confirm';
+    box.append(document.createTextNode('Jalankan Hermes: «' + e.payload.text + '»?'));
+    for (const [txt, ok] of [['Izinkan', true], ['Batal', false]]) {
+      const b = document.createElement('button');
+      b.textContent = txt;
+      if (ok) b.className = 'ok';
+      b.addEventListener('click', () => answer(ok));
+      box.append(b);
+    }
+    el.textContent = '';
+    el.append(box);
+    messages.scrollTop = messages.scrollHeight;
+    openNotch('chat', false); // also leaves voice mode; inputBusy() keeps the open panel from auto-closing while pending
+  });
+
   function onChatError(p) {
     if (!pending || p.id !== pending.id) return;
     clearTimeout(chatWatch);
@@ -787,6 +862,8 @@
       el.classList.add('err');
       el.textContent = 'gagal: ' + p.error;
     }
+    if (voice) { voiceFail('gagal menjawab'); return; }
+    flashMood('confused', 1800);
     if (state === 'open') {
       setTitle('Blip', 'gagal');
       if (!hover) setTimeout(maybeClose, 2500);
@@ -809,54 +886,177 @@
 
   listen('tts:start', () => {
     body.classList.add('talking');
+    if (voice && voicePhase === 'think') setPhase('speak');
     if (state === 'answer') setTitle('Blip', 'bicara...');
   });
   listen('tts:end', () => {
     body.classList.remove('talking');
+    if (voice && voiceAnswered && (voicePhase === 'speak' || voicePhase === 'think')) voiceNext();
     if (state === 'answer') {
       setTitle('Blip', '');
       scheduleCollapse();
     }
   });
+  listen('tts:level', e => {
+    if (!voice || voicePhase !== 'speak') return;
+    setLv(Math.max(level01(e.payload, 5), lvT * 0.6));
+  });
 
-  // ---------- stt ----------
-  function startListening() {
-    if (listening) {
-      stopListening();
+  // ---------- voice mode ----------
+  const PHASE_MOOD = { listen: 'listen', think: 'think', speak: 'speak', wait: 'happy', fail: 'confused' };
+  const PHASE_HINT = { listen: 'ketuk jika selesai', think: 'berpikir', speak: 'ketuk untuk menyela', wait: '', fail: '' };
+  function setMood(m) { if (m) body.dataset.mood = m; else delete body.dataset.mood; }
+  function setLv(v) { lvT = v; }
+  const veyes = voiceEl.querySelectorAll('.v-eye');
+  const vring = voiceEl.querySelector('.v-ring');
+  const pose = { sy: [1, 1], rot: [0, 0], x: 0, y: 0, arc: 0, ring: 0.6, ringO: 0, lv: 0 };
+  let eyeRaf = 0, eyeT0 = 0, eyeLast = 0;
+  let gazeX = 0, gazeY = 0, gazeAt = 0, blinkAt = 3000, blinkUntil = 0;
+  function eyeTarget(t) {
+    const m = body.dataset.mood;
+    const T = { sy: [1, 1], rot: [0, 0], x: 0, y: 0, arc: 0, ring: 0.6, ringO: 0 };
+    if (m === 'listen') { const s = 1 + pose.lv * 0.3; T.sy = [s, s]; }
+    else if (m === 'speak') { const s = 1 - pose.lv * 0.5; T.sy = [s, s]; T.ring = 0.6 + pose.lv * 0.5; T.ringO = 0.9; }
+    else if (m === 'think') {
+      if (t > gazeAt) {            // next glance: up and to a random side, or back to centre
+        if (gazeX && Math.random() < 0.35) { gazeX = 0; gazeY = 0; }
+        else { gazeX = (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 3); gazeY = -(4 + Math.random() * 3); }
+        gazeAt = t + 600 + Math.random() * 800;
+      }
+      T.x = gazeX; T.y = gazeY;    // eyes stay fully round: sy stays 1
+      if (t >= blinkAt) { blinkUntil = t + 110; blinkAt = t + 2500 + Math.random() * 2500; }
+      if (t < blinkUntil) T.sy = [0.1, 0.1];
+    }
+    else if (m === 'happy') { T.sy = [0.38, 0.38]; T.y = -6; T.arc = 1; }
+    else if (m === 'confused') { T.sy = [1.1, 0.55]; T.rot = [-12, 8]; }
+    return T;
+  }
+  function eyeFrame(now) {
+    eyeRaf = requestAnimationFrame(eyeFrame);
+    const dt = Math.min(now - eyeLast, 64);
+    eyeLast = now;
+    const k = tau => 1 - Math.exp(-dt / tau);
+    pose.lv += (lvT - pose.lv) * k(lvT > pose.lv ? 40 : 140); // fast attack, slow release
+    const T = eyeTarget(now - eyeT0);
+    const kf = k(60), ks = k(110);
+    for (let i = 0; i < 2; i++) {
+      pose.sy[i] += (T.sy[i] - pose.sy[i]) * kf;
+      pose.rot[i] += (T.rot[i] - pose.rot[i]) * ks;
+    }
+    pose.x += (T.x - pose.x) * ks;
+    pose.y += (T.y - pose.y) * ks;
+    pose.arc += (T.arc - pose.arc) * ks;
+    pose.ring += (T.ring - pose.ring) * kf;
+    pose.ringO += (T.ringO - pose.ringO) * ks;
+    const bh = 50 * (1 - pose.arc), tv = 50 + 50 * pose.arc; // arc 0: ellipse, arc 1: top half-ellipse (happy ^)
+    const radius = `50% 50% ${bh}% ${bh}% / ${tv}% ${tv}% ${bh}% ${bh}%`;
+    for (let i = 0; i < 2; i++) {
+      veyes[i].style.transform = `translate(${pose.x}px, ${pose.y}px) rotate(${pose.rot[i]}deg) scaleY(${pose.sy[i]})`;
+      veyes[i].style.borderRadius = radius;
+    }
+    vring.style.opacity = pose.ringO;
+    vring.style.transform = `scale(${pose.ring})`;
+  }
+  function eyeStart() {
+    Object.assign(pose, { sy: [1, 1], rot: [0, 0], x: 0, y: 0, arc: 0, ring: 0.6, ringO: 0, lv: 0 });
+    lvT = 0;
+    gazeX = gazeY = gazeAt = blinkUntil = 0; blinkAt = 3000;
+    eyeT0 = eyeLast = performance.now();
+    cancelAnimationFrame(eyeRaf);
+    eyeRaf = requestAnimationFrame(eyeFrame);
+  }
+  function setPhase(p) {
+    voicePhase = p;
+    setMood(PHASE_MOOD[p]);
+    vHint.textContent = PHASE_HINT[p] || '';
+    if (p !== 'speak' && p !== 'listen') setLv(0);
+  }
+  function flashMood(m, ms) {
+    setMood(m);
+    clearTimeout(moodTimer);
+    moodTimer = setTimeout(() => setMood(voice ? PHASE_MOOD[voicePhase] : ''), ms);
+  }
+  function voiceReset() {
+    cancelAnimationFrame(eyeRaf);
+    voice = false; voicePhase = ''; voiceAnswered = false;
+    clearTimeout(voiceTimer); clearTimeout(listenWatch);
+    setMood(''); setLv(0); vText.textContent = ''; vHint.textContent = '';
+  }
+  function enterVoice() {
+    if (voice) return;
+    voice = true;
+    clearTimeout(collapseTimer); clearTimeout(openTimer);
+    invoke('stop_speak').catch(() => {});
+    if (pending) invoke('chat_abort', { id: pending.id }).catch(() => {});
+    vText.textContent = '';
+    eyeStart();
+    go('voice');
+    voiceListen();
+  }
+  function voiceEnd() {
+    if (!voice) return;
+    voiceReset();
+    invoke('stop_speak').catch(() => {});
+    if (listening) { listening = false; invoke('rec_stop').catch(() => {}); }
+    go(topActivity() ? 'live' : 'idle');
+  }
+  function voiceListen() {
+    if (!voice) return;
+    voiceAnswered = false;
+    setPhase('listen');
+    listening = true;
+    clearTimeout(listenWatch);
+    listenWatch = setTimeout(() => { if (voice && voicePhase === 'listen') invoke('rec_stop').catch(() => {}); }, 32000);
+    invoke('rec_start', { mode: 'chat' }).catch(() => voiceFail('mic gagal'));
+  }
+  function voiceFail(msg) {
+    listening = false;
+    clearTimeout(listenWatch);
+    if (!voice) return;
+    vText.textContent = String(msg).slice(0, 60);
+    setPhase('fail');
+    clearTimeout(voiceTimer);
+    voiceTimer = setTimeout(() => { if (voice && voicePhase === 'fail') voiceEnd(); }, 2200);
+  }
+  function voiceAsk(text) {
+    listening = false;
+    clearTimeout(listenWatch);
+    vText.textContent = text;
+    voiceAnswered = false;
+    setPhase('think');
+    const quick = !!(parseIntent(text) || parseTimer(text));
+    send(text);
+    if (quick) {
+      // media/volume/timer commands answer instantly with no chat turn: back to listening
+      voiceTimer = setTimeout(() => { if (voice && voicePhase === 'think') voiceListen(); }, 1100);
+    } else if (!pending) {
+      voiceEnd(); // send() refused (e.g. a previous turn is still pending)
+    }
+  }
+  function voiceNext() {
+    if (!voice) return;
+    setPhase('wait');
+    clearTimeout(voiceTimer);
+    voiceTimer = setTimeout(() => { if (voice && voicePhase === 'wait') voiceListen(); }, 650);
+  }
+  function voiceTap() {
+    if (voicePhase === 'listen') { invoke('rec_stop').catch(() => {}); return; } // finish early
+    if (voicePhase === 'think') {                                                 // cancel
+      if (pending) invoke('chat_abort', { id: pending.id }).catch(() => {});
+      voiceEnd();
       return;
     }
-    if (pending) invoke('chat_abort', { id: pending.id }).catch(() => {});
+    if (pending) invoke('chat_abort', { id: pending.id }).catch(() => {});       // speak/wait: barge in
     invoke('stop_speak').catch(() => {});
-    listening = true;
-    setTitle('Blip', 'mendengar...');
-    go('listening');
-
-    clearTimeout(listenWatch);
-    listenWatch = setTimeout(() => {
-      if (listening) stopListening();
-    }, 30000);
-
-    invoke('rec_start', { mode: 'chat' }).catch(err => {
-      clearTimeout(listenWatch);
-      listening = false;
-      setTitle('Blip', 'mic gagal');
-      answerEl.classList.add('err');
-      answerEl.textContent = 'mic gagal: ' + err;
-      go('answer');
-      scheduleCollapse(4000);
-    });
+    clearTimeout(voiceTimer);
+    voiceListen();
   }
+  voiceEl.addEventListener('click', () => { if (voice) voiceTap(); });
 
-  function stopListening() {
-    if (!listening) return;
-    clearTimeout(listenWatch);
-    listening = false;
-    setTitle('Blip', 'memproses...');
-    go('thinking');
-    invoke('rec_stop').catch(() => {});
-  }
+  // ---------- stt ----------
 
   listen('rec:level', e => {
+    if (voice && voicePhase === 'listen') { setLv(level01(e.payload, 8)); return; }
     if (state !== 'listening') return;
     const rms = Math.max(0, Math.min(1, Number(e.payload) * 8));
     const bars = wave.children;
@@ -868,12 +1068,14 @@
   listen('stt:result', e => {
     clearTimeout(listenWatch);
     listening = false;
-    send(e.payload.text);
+    if (!voice) return;
+    voiceAsk(e.payload.text);
   });
 
   listen('stt:empty', () => {
     clearTimeout(listenWatch);
     listening = false;
+    if (voice) { voiceEnd(); return; }
     setTitle('Blip', 'tidak terdengar');
     go('live');
     scheduleCollapse(1500);
@@ -882,6 +1084,7 @@
   listen('stt:error', e => {
     clearTimeout(listenWatch);
     listening = false;
+    if (voice) { voiceFail(e.payload.error); return; }
     answerEl.classList.add('err');
     answerEl.textContent = e.payload.error;
     setTitle('Blip', 'stt gagal');
@@ -914,27 +1117,20 @@
 
   // ---------- hotkey ----------
   listen('hotkey', () => {
-    if (state === 'listening') {
-      if (dictating) return;
-      stopListening();
-      return;
-    }
+    if (voice) { voiceTap(); return; }
+    if (state === 'listening') return; // dictation owns the key
     if (state === 'thinking') {
       if (pending) invoke('chat_abort', { id: pending.id }).catch(() => {});
       pending = null;
       go('idle');
       return;
     }
-    if (state === 'answer' || state === 'open') {
-      invoke('stop_speak').catch(() => {});
-      startListening();
-      return;
-    }
-    startListening();
+    if (state === 'answer' || state === 'open') invoke('stop_speak').catch(() => {});
+    enterVoice();
   });
 
   listen('ui:show', () => {
-    if (state === 'idle' || state === 'live') startListening();
+    if (state === 'idle' || state === 'live') enterVoice();
   });
 
   listen('ui:hide', () => hideAll());
@@ -950,6 +1146,7 @@
   });
 
   function hideAll() {
+    voiceReset();
     pinned = false;
     pinBtn.classList.remove('on');
     invoke('stop_speak').catch(() => {});
@@ -2000,7 +2197,7 @@
   });
 
   $('#send').addEventListener('click', () => send(input.value));
-  $('#mic').addEventListener('click', startListening);
+  $('#mic').addEventListener('click', enterVoice);
 
   ttsBtn.addEventListener('click', () => {
     ttsOn = !ttsOn;
@@ -2050,6 +2247,21 @@
     });
   });
 
+  new MutationObserver(() => {
+    if (state !== 'open' || page !== 'chat') return;
+    requestAnimationFrame(() => { applySize(); messages.scrollTop = messages.scrollHeight; });
+  }).observe(messages, { childList: true, subtree: true, characterData: true });
+
+  (function idleFun() {
+    setTimeout(() => {
+      if (state === 'idle' && !voice && !hover && !compact &&
+          body.classList.contains('eyesmode') && !body.classList.contains('sleepy')) {
+        flashMood(['look-l', 'look-r', 'happy', 'look-l'][Math.floor(Math.random() * 4)], 900);
+      }
+      idleFun();
+    }, 6000 + Math.random() * 6000);
+  })();
+
   // ---------- boot ----------
   body.dataset.page = page;
   markPage();
@@ -2066,6 +2278,7 @@
     .then(i => {
       modelEl.textContent = i.model + ' | stt: ' + i.stt;
       ttsOn = !!i.tts;
+      ttsEnabled = !!i.tts;
       ttsBtn.textContent = 'suara: ' + (ttsOn ? 'on' : 'off');
       autoCollapseMs = i.autoCollapseMs || 5000;
       applySize();

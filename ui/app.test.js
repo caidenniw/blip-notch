@@ -3,7 +3,7 @@ const { strictEqual, deepStrictEqual } = require('assert');
 const {
   parseTimer, parseIntent, fmt, fmtTrack, trackPos,
   normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
-  avgColor, fileKind,
+  avgColor, fileKind, chatHeightFor, level01,
 } = require('./lib.js');
 
 strictEqual(parseTimer('timer 5 menit'), 300);
@@ -115,5 +115,13 @@ strictEqual(fileKind('mp4'), 'video');
 strictEqual(fileKind('ts'), 'code');
 strictEqual(fileKind('jpg'), 'image');
 strictEqual(fileKind('bin'), 'file');
+strictEqual(chatHeightFor(142, 0), 170);
+strictEqual(chatHeightFor(142, 60), 208);
+strictEqual(chatHeightFor(142, 500), 280);
+strictEqual(level01(0.1, 5), 0.5);
+strictEqual(level01(0.5, 5), 1);
+strictEqual(level01(-1, 5), 0);
+strictEqual(level01(NaN, 5), 0);
+
 
 console.log('ok');

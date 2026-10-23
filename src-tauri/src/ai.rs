@@ -3,7 +3,7 @@ use futures_util::future::{AbortHandle, Abortable};
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, LazyLock, Mutex};
 use tauri::{AppHandle, Emitter};
 
@@ -70,7 +70,7 @@ async fn run_chat(app: AppHandle, id: String, messages: Vec<serde_json::Value>, 
         None
     };
     for model in chain {
-        match stream_once(&app, &id, &model, &messages, &mut speaker).await {
+        match agent_once(&app, &id, &model, &messages, &mut speaker).await {
             Ok(n) if n > 0 => {
                 conf::log(&format!("chat done {id} model {model} chars {n}"));
                 let _ = app.emit("chat:done", serde_json::json!({ "id": id, "model": model }));
@@ -122,7 +122,61 @@ async fn run_chat(app: AppHandle, id: String, messages: Vec<serde_json::Value>, 
     );
 }
 
-async fn stream_once(
+#[derive(Default, Debug, PartialEq)]
+struct Acc {
+    id: String,
+    name: String,
+    args: String,
+}
+
+struct Round {
+    text: String,
+    calls: Vec<Acc>,
+}
+
+/// Merges streamed `delta.tool_calls`. Providers differ: gemma sends a whole call in one chunk,
+/// others split `arguments` across chunks, and some omit `index` (then a new non-empty `id` means a new call).
+fn accumulate(accs: &mut Vec<Acc>, tcs: &serde_json::Value) {
+    for tc in tcs.as_array().into_iter().flatten() {
+        let has_id = tc["id"].as_str().is_some_and(|s| !s.is_empty());
+        let idx = match tc["index"].as_u64() {
+            Some(i) => i as usize,
+            None if has_id => accs.len(),
+            None => accs.len().saturating_sub(1),
+        };
+        if accs.len() <= idx {
+            accs.resize_with(idx + 1, Acc::default);
+        }
+        let a = &mut accs[idx];
+        if has_id {
+            a.id = tc["id"].as_str().unwrap_or("").into();
+        }
+        if let Some(n) = tc["function"]["name"].as_str().filter(|n| !n.is_empty()) {
+            a.name = n.into();
+        }
+        if let Some(s) = tc["function"]["arguments"].as_str() {
+            a.args.push_str(s);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn now_str() -> String {
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let day = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][t.wDayOfWeek as usize % 7];
+    format!("{day} {:04}-{:02}-{:02} {:02}:{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute)
+}
+#[cfg(not(windows))]
+fn now_str() -> String {
+    String::new()
+}
+
+const MAX_ROUNDS: usize = 5;
+
+/// Chat with tool calling: stream a round, run requested tools, feed results back, repeat.
+/// Once a tool has run, errors report >0 chars sent so `run_chat` never falls back to another
+/// model (that would repeat side effects such as opening a page).
+async fn agent_once(
     app: &AppHandle,
     id: &str,
     model: &str,
@@ -130,9 +184,71 @@ async fn stream_once(
     speaker: &mut Option<Speaker>,
 ) -> Result<usize, (usize, String)> {
     let c = conf::get();
-    let base = c.router.base_url.trim_end_matches('/').to_string();
-    let mut msgs = vec![serde_json::json!({ "role": "system", "content": c.system_prompt })];
+    let system = format!("{}\nWaktu lokal sekarang: {}.", c.system_prompt, now_str());
+    let mut msgs = vec![serde_json::json!({ "role": "system", "content": system })];
     msgs.extend_from_slice(messages);
+    let specs = crate::tools::specs();
+    let (mut total, mut ran) = (0usize, false);
+    for round in 0..=MAX_ROUNDS {
+        let offered: &[serde_json::Value] = if round < MAX_ROUNDS { &specs } else { &[] };
+        let r = stream_once(app, id, model, &msgs, speaker, offered)
+            .await
+            .map_err(|(n, e)| (std::cmp::max(total + n, ran as usize), e))?;
+        total += r.text.len();
+        if r.calls.is_empty() {
+            if ran && total == 0 {
+                let _ = app.emit("chat:chunk", serde_json::json!({ "id": id, "delta": "Selesai." }));
+                if let Some(s) = speaker.as_mut() {
+                    s.push("Selesai.");
+                }
+                total = 8;
+            }
+            return Ok(total);
+        }
+        if !r.text.is_empty() {
+            let _ = app.emit("chat:chunk", serde_json::json!({ "id": id, "delta": "\n\n" }));
+        }
+        let calls: Vec<serde_json::Value> = r
+            .calls
+            .iter()
+            .map(|a| serde_json::json!({ "id": a.id, "type": "function", "function": { "name": a.name, "arguments": a.args } }))
+            .collect();
+        let content = if r.text.is_empty() { serde_json::Value::Null } else { r.text.clone().into() };
+        msgs.push(serde_json::json!({ "role": "assistant", "content": content, "tool_calls": calls }));
+        for (i, a) in r.calls.iter().enumerate() {
+            let _ = app.emit(
+                "tool:start",
+                serde_json::json!({ "id": id, "name": a.name, "label": crate::tools::label(&a.name) }),
+            );
+            let out = match serde_json::from_str::<serde_json::Value>(if a.args.trim().is_empty() { "{}" } else { &a.args }) {
+                Ok(args) => crate::tools::run(app, id, &format!("{id}:{round}:{i}"), &a.name, &args).await,
+                Err(_) => "error: argumen tidak valid".to_string(),
+            };
+            let _ = app.emit(
+                "tool:end",
+                serde_json::json!({ "id": id, "name": a.name, "ok": !out.starts_with("error:") }),
+            );
+            msgs.push(serde_json::json!({ "role": "tool", "tool_call_id": a.id, "content": out }));
+        }
+        ran = true;
+    }
+    Ok(total)
+}
+
+async fn stream_once(
+    app: &AppHandle,
+    id: &str,
+    model: &str,
+    msgs: &[serde_json::Value],
+    speaker: &mut Option<Speaker>,
+    tools: &[serde_json::Value],
+) -> Result<Round, (usize, String)> {
+    let c = conf::get();
+    let base = c.router.base_url.trim_end_matches('/').to_string();
+    let mut body = serde_json::json!({ "model": model, "stream": true, "messages": msgs });
+    if !tools.is_empty() {
+        body["tools"] = tools.into();
+    }
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{base}/chat/completions"))
@@ -141,7 +257,7 @@ async fn stream_once(
         // proxies (≈800 extra prompt tokens) and the model then answers like a terse dev.
         // This header turns that off for Blip's chat only, leaving the user's setup alone.
         .header("x-9router-token-saver", "off")
-        .json(&serde_json::json!({ "model": model, "stream": true, "messages": msgs }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| (0, e.to_string()))?;
@@ -152,11 +268,12 @@ async fn stream_once(
     }
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
-    let mut n = 0usize;
+    let mut text = String::new();
+    let mut calls: Vec<Acc> = Vec::new();
     while let Some(chunk) = stream.next().await {
         let chunk = match chunk {
             Ok(c) => c,
-            Err(e) => return Err((n, e.to_string())),
+            Err(e) => return Err((text.len(), e.to_string())),
         };
         buf.push_str(&String::from_utf8_lossy(&chunk));
         while let Some(pos) = buf.find('\n') {
@@ -168,18 +285,26 @@ async fn stream_once(
                 continue;
             }
             let Ok(j) = serde_json::from_str::<serde_json::Value>(data) else { continue };
-            if let Some(delta) = j["choices"][0]["delta"]["content"].as_str() {
-                if !delta.is_empty() {
-                    n += delta.len();
-                    let _ = app.emit("chat:chunk", serde_json::json!({ "id": id, "delta": delta }));
+            let delta = &j["choices"][0]["delta"];
+            if let Some(d) = delta["content"].as_str() {
+                if !d.is_empty() {
+                    text.push_str(d);
+                    let _ = app.emit("chat:chunk", serde_json::json!({ "id": id, "delta": d }));
                     if let Some(s) = speaker.as_mut() {
-                        s.push(delta);
+                        s.push(d);
                     }
                 }
             }
+            accumulate(&mut calls, &delta["tool_calls"]);
         }
     }
-    Ok(n)
+    calls.retain(|a| !a.name.is_empty());
+    for (i, a) in calls.iter_mut().enumerate() {
+        if a.id.is_empty() {
+            a.id = format!("call_{i}");
+        }
+    }
+    Ok(Round { text, calls })
 }
 
 pub async fn stt(wav: Vec<u8>) -> Result<String, String> {
@@ -214,6 +339,8 @@ pub async fn stt(wav: Vec<u8>) -> Result<String, String> {
     local_stt(wav)
 }
 
+const STT_SCRIPT: &str = include_str!("../../scripts/stt_local.py");
+
 fn local_stt(wav: Vec<u8>) -> Result<String, String> {
     use std::process::Command;
     let tmp = std::env::temp_dir().join(format!(
@@ -224,7 +351,8 @@ fn local_stt(wav: Vec<u8>) -> Result<String, String> {
             .unwrap_or(0)
     ));
     std::fs::write(&tmp, &wav).map_err(|e| e.to_string())?;
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/stt_local.py");
+    let script = conf::dir().join("stt_local.py");
+    std::fs::write(&script, STT_SCRIPT).map_err(|e| e.to_string())?;
     let out = Command::new("uv")
         .args(["run", "--with", "faster-whisper", "python"])
         .arg(&script)
@@ -449,6 +577,8 @@ impl Speaker {
 
 fn play_jobs(app: AppHandle, rx: mpsc::Receiver<Job>, stop: Arc<AtomicBool>) {
     let mut out: Option<(rodio::OutputStream, rodio::Sink)> = None;
+    let level = Arc::new(AtomicU32::new(0));
+    let done = Arc::new(AtomicBool::new(false));
     for job in rx {
         if stop.load(Ordering::Relaxed) {
             break;
@@ -475,6 +605,14 @@ fn play_jobs(app: AppHandle, rx: mpsc::Receiver<Job>, stop: Arc<AtomicBool>) {
                 Ok(p) => {
                     out = Some(p);
                     let _ = app.emit("tts:start", ());
+                    let (a, l, d) = (app.clone(), level.clone(), done.clone());
+                    std::thread::spawn(move || {
+                        while !d.load(Ordering::Relaxed) {
+                            std::thread::sleep(std::time::Duration::from_millis(40));
+                            let _ = a.emit("tts:level", f32::from_bits(l.swap(0, Ordering::Relaxed)));
+                        }
+                        let _ = a.emit("tts:level", 0.0f32);
+                    });
                 }
                 Err(e) => {
                     conf::log(&format!("audio output gagal: {e}"));
@@ -485,7 +623,7 @@ fn play_jobs(app: AppHandle, rx: mpsc::Receiver<Job>, stop: Arc<AtomicBool>) {
         match rodio::Decoder::new(std::io::Cursor::new(bytes)) {
             Ok(d) => {
                 if let Some((_, sink)) = &out {
-                    sink.append(d);
+                    sink.append(Meter::new(d, level.clone()));
                 }
             }
             Err(e) => conf::log(&format!("decode tts gagal: {e}")),
@@ -500,7 +638,35 @@ fn play_jobs(app: AppHandle, rx: mpsc::Receiver<Job>, stop: Arc<AtomicBool>) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
+    done.store(true, Ordering::Relaxed);
     let _ = app.emit("tts:end", ());
+}
+
+/// Passes samples through and publishes the RMS of every 512 samples (for lip-sync).
+struct Meter<S> { inner: S, level: Arc<AtomicU32>, acc: f32, n: u32 }
+impl<S> Meter<S> {
+    fn new(inner: S, level: Arc<AtomicU32>) -> Self { Meter { inner, level, acc: 0.0, n: 0 } }
+}
+impl<S: rodio::Source<Item = i16>> Iterator for Meter<S> {
+    type Item = i16;
+    fn next(&mut self) -> Option<i16> {
+        let s = self.inner.next()?;
+        let f = s as f32 / 32768.0;
+        self.acc += f * f;
+        self.n += 1;
+        if self.n == 512 {
+            self.level.store((self.acc / 512.0).sqrt().to_bits(), Ordering::Relaxed);
+            self.acc = 0.0;
+            self.n = 0;
+        }
+        Some(s)
+    }
+}
+impl<S: rodio::Source<Item = i16>> rodio::Source for Meter<S> {
+    fn current_frame_len(&self) -> Option<usize> { rodio::Source::current_frame_len(&self.inner) }
+    fn channels(&self) -> u16 { rodio::Source::channels(&self.inner) }
+    fn sample_rate(&self) -> u32 { rodio::Source::sample_rate(&self.inner) }
+    fn total_duration(&self) -> Option<std::time::Duration> { rodio::Source::total_duration(&self.inner) }
 }
 
 fn stop_current() {
@@ -532,7 +698,17 @@ pub fn beep() {
 
 #[cfg(test)]
 mod tests {
-    use super::sentence_end;
+    use super::{sentence_end, Meter};
+    use std::sync::{atomic::{AtomicU32, Ordering}, Arc};
+
+    #[test]
+    fn meter_reports_rms() {
+        let level = Arc::new(AtomicU32::new(0));
+        let src = rodio::buffer::SamplesBuffer::new(1, 44100, vec![16384i16; 1024]);
+        assert_eq!(Meter::new(src, level.clone()).count(), 1024);
+        let v = f32::from_bits(level.load(Ordering::Relaxed));
+        assert!((v - 0.5).abs() < 0.01, "rms {v}");
+    }
 
     #[test]
     fn splits_at_sentence_end_not_decimals_or_short_chunks() {
@@ -546,5 +722,37 @@ mod tests {
         let first = "Fotosintesis adalah proses tumbuhan, yang memakai cahaya";
         assert_eq!(sentence_end(first, 15, true), Some("Fotosintesis adalah proses tumbuhan,".len()));
         assert_eq!(sentence_end(first, 15, false), None);
+    }
+}
+
+#[cfg(test)]
+mod tool_tests {
+    use super::{accumulate, Acc};
+    use serde_json::json;
+
+    #[test]
+    fn tool_deltas_accumulate() {
+        // gemma: whole call in one chunk with index
+        let mut a = Vec::new();
+        accumulate(&mut a, &json!([{ "index": 0, "id": "c1", "type": "function", "function": { "name": "open_url", "arguments": "{\"url\":\"x\"}" } }]));
+        assert_eq!(a, vec![Acc { id: "c1".into(), name: "open_url".into(), args: "{\"url\":\"x\"}".into() }]);
+
+        // args split across chunks with the same index
+        let mut a = Vec::new();
+        accumulate(&mut a, &json!([{ "index": 0, "id": "c1", "function": { "name": "f", "arguments": "{\"a\"" } }]));
+        accumulate(&mut a, &json!([{ "index": 0, "function": { "arguments": ":1" } }]));
+        accumulate(&mut a, &json!([{ "index": 0, "function": { "arguments": "}" } }]));
+        assert_eq!(a.len(), 1);
+        assert!(serde_json::from_str::<serde_json::Value>(&a[0].args).is_ok());
+
+        // no index: a new non-empty id starts a new call, id-less chunk appends to the last one
+        let mut a = Vec::new();
+        accumulate(&mut a, &json!([{ "id": "c1", "function": { "name": "f", "arguments": "{}" } }]));
+        accumulate(&mut a, &json!([{ "id": "c2", "function": { "name": "g", "arguments": "{\"k\"" } }]));
+        accumulate(&mut a, &json!([{ "function": { "arguments": ":2}" } }]));
+        assert_eq!(a.len(), 2);
+        assert_eq!(a[1].name, "g");
+        assert_eq!(a[1].args, "{\"k\":2}");
+        assert_eq!(a[0].args, "{}");
     }
 }

@@ -26,7 +26,21 @@ Build rilis:
 npm run build
 ```
 
-Hasil: `src-tauri\target\release\blip.exe`.
+Hasil:
+- exe: `src-tauri\target\release\blip.exe`
+- installer: `src-tauri\target\release\bundle\nsis\Blip_0.1.0_x64-setup.exe` (per-user, tanpa admin, shortcut Start Menu, ada uninstaller)
+
+Build pertama mengunduh NSIS (butuh internet). Di Task Manager Blip tampil sebagai proses `Blip` sendiri; Node.js hanya dipakai `npm run dev`.
+
+## Instal untuk pengguna lain
+
+Installer tidak membawa dependensi runtime. Pengguna perlu menyiapkan:
+
+- `%APPDATA%\Blip\blip.config.json`: `router.baseUrl` ke endpoint OpenAI-compatible (default `http://127.0.0.1:20128/v1`) dan `router.apiKey` (kosong -> dibaca dari `~/.hermes/config.yaml`). Bentuk JSON: lihat bagian Config.
+- STT: isi `stt.apiKey` Groq, atau pasang `uv` (whisper lokal via `uv run --with faster-whisper`).
+- TTS: `uv` + `edge-tts` (`uv tool install edge-tts`), atau kunci ElevenLabs.
+- Perubahan config butuh restart app.
+- Installer tidak ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 
 ## Config
 
@@ -35,6 +49,7 @@ Hasil: `src-tauri\target\release\blip.exe`.
 ```json
 {
   "router": { "baseUrl": "http://127.0.0.1:20128/v1", "apiKey": "", "models": ["oc/deepseek-v4.1-flash-free", "..."] },
+  "tools":  { "tavilyKey": "", "apps": { "notepad": "notepad.exe" } },
   "stt":    { "provider": "groq", "apiKey": "", "model": "whisper-large-v3-turbo", "language": "id" },
   "tts":    { "enabled": true, "voice": "id-ID-ArdiNeural" },
   "ui":     { "port": 51321, "holdMs": 300, "autoCollapseMs": 5000 },
@@ -45,6 +60,7 @@ Hasil: `src-tauri\target\release\blip.exe`.
 - `router.apiKey` kosong -> dibaca dari `~/.hermes/config.yaml`.
 - `stt.provider != "groq"` atau `apiKey` kosong -> whisper lokal via `uv run --with faster-whisper`.
 - Perubahan config butuh restart app.
+- `tools.tavilyKey` (dari tavily.com) mengaktifkan tool `web_search`; `tools.apps` (nama -> exe/URI) mengaktifkan `open_app`; `ask_hermes` muncul otomatis bila `hermes.exe` ada di PATH dan selalu minta konfirmasi.
 
 ## Perilaku
 

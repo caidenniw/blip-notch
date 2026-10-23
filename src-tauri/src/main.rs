@@ -9,6 +9,7 @@ mod media;
 mod rec;
 mod server;
 mod sys;
+mod tools;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -31,6 +32,7 @@ fn main() {
             island::release_focus,
             ai::chat_send,
             ai::chat_abort,
+            tools::tool_confirm,
             ai::stop_speak,
             ai::beep,
             rec::rec_start,

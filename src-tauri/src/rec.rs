@@ -11,6 +11,60 @@ static REC: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 const SPEECH_RMS: f32 = 0.018;
 const SILENCE_MS: u64 = 1300;
+const NO_SPEECH_MS: u64 = 8000;
+
+const WARMUP_FRAMES: u32 = 2; // mic start-up frames read ~0, ignore
+const CALIB_FRAMES: u32 = 8; // frames 3..=8 (300 ms) set the noise floor
+const ONSET_FRAMES: u32 = 3; // 150 ms above threshold = speech, so clicks/taps do not count
+
+#[derive(Default)]
+struct Vad {
+    n: u32,
+    floor: f32,
+    peak: f32,
+    run: u32,
+    onset: bool,
+    quiet_since: Option<u64>,
+}
+
+impl Vad {
+    /// Feed one 50 ms RMS frame. True when the utterance is over.
+    fn feed(&mut self, rms: f32, now_ms: u64) -> bool {
+        self.n += 1;
+        if self.n <= WARMUP_FRAMES {
+            return false;
+        }
+        if self.n <= CALIB_FRAMES {
+            self.floor = if self.n == WARMUP_FRAMES + 1 { rms } else { self.floor.min(rms) };
+            self.floor = self.floor.clamp(0.002, 0.04);
+            return false;
+        }
+        let start = SPEECH_RMS.max(self.floor * 2.5);
+        if !self.onset {
+            if rms > start {
+                self.run += 1;
+            } else {
+                self.run = 0;
+                // follow slow noise drift (fan spinning up/down) while nobody talks
+                self.floor = (self.floor + (rms - self.floor) * 0.05).clamp(0.002, 0.04);
+            }
+            if self.run >= ONSET_FRAMES {
+                self.onset = true;
+                self.peak = rms;
+            }
+            return false;
+        }
+        self.peak = self.peak.max(rms);
+        // speech ends when the signal falls back near the noise floor or well under the loudest speech
+        let end = (self.floor * 1.8).max(0.012).max(self.peak * 0.25);
+        if rms > end {
+            self.quiet_since = None;
+            return false;
+        }
+        let t = *self.quiet_since.get_or_insert(now_ms);
+        now_ms - t > SILENCE_MS
+    }
+}
 
 pub fn start(app: AppHandle, mode: &str) -> Result<(), String> {
     let mut guard = REC.lock().unwrap();
@@ -133,8 +187,7 @@ fn capture(app: AppHandle, mode: String, stop_flag: Arc<AtomicBool>) {
     }
 
     let started = Instant::now();
-    let mut onset = false;
-    let mut silence_since: u64 = 0;
+    let mut vad = Vad::default();
     loop {
         if stop_flag.load(Ordering::Relaxed) {
             break;
@@ -143,17 +196,8 @@ fn capture(app: AppHandle, mode: String, stop_flag: Arc<AtomicBool>) {
         let rms = f32::from_bits(level.load(Ordering::Relaxed));
         let _ = app.emit("rec:level", rms);
         let elapsed = started.elapsed().as_millis() as u64;
-        if mode == "chat" {
-            if rms > SPEECH_RMS {
-                onset = true;
-                silence_since = 0;
-            } else if onset {
-                if silence_since == 0 {
-                    silence_since = elapsed;
-                } else if elapsed - silence_since > SILENCE_MS {
-                    break;
-                }
-            }
+        if mode == "chat" && (vad.feed(rms, elapsed) || (!vad.onset && elapsed > NO_SPEECH_MS)) {
+            break;
         }
         let limit_ms = if mode == "chat" { 30_000 } else { 120_000 };
         if elapsed > limit_ms {
@@ -166,14 +210,14 @@ fn capture(app: AppHandle, mode: String, stop_flag: Arc<AtomicBool>) {
     *REC.lock().unwrap() = None;
 
     let duration = samples.len() as f32 / rate.max(1) as f32;
-    if duration < 0.4 || (mode == "chat" && !onset) {
+    if duration < 0.4 || (mode == "chat" && !vad.onset) {
         let _ = app.emit("stt:empty", ());
         return;
     }
 
     let pcm = resample(&samples, rate, 16_000);
     let wav = wav_bytes(&pcm, 16_000);
-    conf::log(&format!("rec {mode} {} samples {duration:.1}s", samples.len()));
+    conf::log(&format!("rec {mode} {} samples {duration:.1}s floor {:.3}", samples.len(), vad.floor));
 
     match tauri::async_runtime::block_on(ai::stt(wav)) {
         Ok(text) if !text.trim().is_empty() => {
@@ -285,5 +329,54 @@ fn send_ctrl_v() {
     ];
     unsafe {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Vad;
+
+    fn run(v: &mut Vad, rms: f32, ms: u64, t: &mut u64) -> bool {
+        let mut end = false;
+        for _ in 0..ms / 50 {
+            *t += 50;
+            end |= v.feed(rms, *t);
+        }
+        end
+    }
+
+    #[test]
+    fn steady_fan_never_starts() {
+        let (mut v, mut t) = (Vad::default(), 0);
+        assert!(!run(&mut v, 0.03, 10_000, &mut t));
+        assert!(!v.onset);
+    }
+
+    #[test]
+    fn speech_over_fan_ends_after_silence() {
+        let (mut v, mut t) = (Vad::default(), 0);
+        run(&mut v, 0.03, 1000, &mut t);
+        assert!(!v.onset);
+        run(&mut v, 0.12, 1000, &mut t);
+        assert!(v.onset);
+        assert!(!run(&mut v, 0.03, 1000, &mut t));
+        assert!(run(&mut v, 0.03, 500, &mut t));
+    }
+
+    #[test]
+    fn click_is_not_speech() {
+        let (mut v, mut t) = (Vad::default(), 0);
+        run(&mut v, 0.004, 1000, &mut t);
+        run(&mut v, 0.2, 50, &mut t);
+        run(&mut v, 0.004, 1000, &mut t);
+        assert!(!v.onset);
+    }
+
+    #[test]
+    fn quiet_room_speech_starts() {
+        let (mut v, mut t) = (Vad::default(), 0);
+        run(&mut v, 0.004, 1000, &mut t);
+        run(&mut v, 0.05, 500, &mut t);
+        assert!(v.onset);
     }
 }

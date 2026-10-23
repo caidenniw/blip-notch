@@ -239,10 +239,19 @@ function avgColor(data) {
   return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
 }
 
+const CHAT_MIN = 170, CHAT_MAX = 280;
+function chatHeightFor(chrome, content) {
+  return Math.max(CHAT_MIN, Math.min(CHAT_MAX, Math.ceil((chrome + content) / 8) * 8));
+}
+function level01(rms, gain) {
+  const v = Number(rms) * gain;
+  return v > 0 ? Math.min(1, v) : 0; // NaN and negatives -> 0
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     parseTimer, fmt, fmtTrack, trackPos, APPS, parseIntent, INTENT_LABEL,
     normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
-    avgColor, fileKind,
+    avgColor, fileKind, chatHeightFor, level01,
   };
 }
