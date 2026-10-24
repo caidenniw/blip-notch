@@ -1,0 +1,30 @@
+{
+  "router": {
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKey": "",
+    "models": [
+      "gpt-4o-mini"
+    ],
+    "headers": {}
+  },
+  "stt": {
+    "provider": "groq",
+    "apiKey": "",
+    "model": "whisper-large-v3-turbo",
+    "language": "id"
+  },
+  "tts": {
+    "enabled": true,
+    "voice": "id-ID-ArdiNeural",
+    "provider": "edge",
+    "elevenApiKey": "",
+    "elevenVoiceId": "",
+    "elevenModel": "eleven_multilingual_v2"
+  },
+  "ui": {
+    "port": 51321,
+    "holdMs": 300,
+    "autoCollapseMs": 5000
+  },
+  "systemPrompt": ""
+}
