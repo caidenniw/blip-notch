@@ -13,6 +13,11 @@ Built with Tauri 2 (Rust + WebView2), not Electron. MIT licensed. The UI and the
   <img src="docs/screenshots/music.png" alt="Music page with synced lyrics" />
 </p>
 <p align="center">
+  <img src="docs/screenshots/voice-listening.png" alt="Listening" width="31%" />
+  <img src="docs/screenshots/voice-thinking.png" alt="Thinking" width="31%" />
+  <img src="docs/screenshots/voice-speaking.png" alt="Speaking" width="31%" />
+</p>
+<p align="center">
   <img src="docs/screenshots/today.png" alt="Today page" width="48%" />
   <img src="docs/screenshots/chat.png" alt="Chat page" width="48%" />
   <img src="docs/screenshots/tasks.png" alt="Tasks page" width="48%" />

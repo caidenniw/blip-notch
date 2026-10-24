@@ -13,6 +13,11 @@ Dibangun dengan Tauri 2 (Rust + WebView2) — bukan Electron. Lisensi MIT.
   <img src="docs/screenshots/music.png" alt="Halaman Musik dengan lirik sinkron" />
 </p>
 <p align="center">
+  <img src="docs/screenshots/voice-listening.png" alt="Mendengar" width="31%" />
+  <img src="docs/screenshots/voice-thinking.png" alt="Berpikir" width="31%" />
+  <img src="docs/screenshots/voice-speaking.png" alt="Berbicara" width="31%" />
+</p>
+<p align="center">
   <img src="docs/screenshots/today.png" alt="Halaman Hari ini" width="48%" />
   <img src="docs/screenshots/chat.png" alt="Halaman Obrolan" width="48%" />
   <img src="docs/screenshots/tasks.png" alt="Halaman Tugas" width="48%" />
