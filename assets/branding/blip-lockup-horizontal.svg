@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 634 256" width="634" height="256" role="img" aria-labelledby="title-lockup">
+  <title id="title-lockup">Blip Logo</title>
+  <defs>
+    <linearGradient id="eye-cyan-lockup" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#70d6ff"/>
+      <stop offset="100%" stop-color="#00b4d8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol on Left -->
+  <g id="symbol">
+    <!-- Island capsule -->
+    <rect x="36" y="68" width="184" height="120" rx="60" fill="#111116"/>
+    <!-- Glowing cyan twin eyes -->
+    <rect x="88" y="104" width="24" height="48" rx="12" fill="url(#eye-cyan-lockup)"/>
+    <rect x="144" y="104" width="24" height="48" rx="12" fill="url(#eye-cyan-lockup)"/>
+  </g>
+
+  <!-- Geometric Wordmark 'blip' on Right -->
+  <g id="wordmark" fill="#111116">
+    <!-- b -->
+    <path fill-rule="evenodd" d="
+      M 264 48
+      C 264 42.48 268.48 38 274 38
+      C 279.52 38 284 42.48 284 48
+      V 92
+      C 294.2 83.2 307.5 78 322 78
+      C 350.72 78 374 101.28 374 130
+      C 374 158.72 350.72 182 322 182
+      C 307.5 182 294.2 176.8 284 168
+      V 172
+      C 284 177.52 279.52 182 274 182
+      C 268.48 182 264 177.52 264 172 Z
+      M 322 98
+      C 304.33 98 290 112.33 290 130
+      C 290 147.67 304.33 162 322 162
+      C 339.67 162 354 147.67 354 130
+      C 354 112.33 339.67 98 322 98 Z
+    "/>
+
+    <!-- l -->
+    <rect x="398" y="38" width="20" height="144" rx="10"/>
+
+    <!-- i -->
+    <rect x="442" y="82" width="20" height="100" rx="10"/>
+    <circle cx="452" cy="54" r="10" fill="url(#eye-cyan-lockup)"/>
+
+    <!-- p -->
+    <path fill-rule="evenodd" d="
+      M 488 92
+      C 488 86.48 492.48 82 498 82
+      C 503.52 82 508 86.48 508 92
+      V 96
+      C 518.2 87.2 531.5 82 546 82
+      C 574.72 82 598 105.28 598 134
+      C 598 162.72 574.72 186 546 186
+      C 531.5 186 518.2 180.8 508 172
+      V 212
+      C 508 217.52 503.52 222 498 222
+      C 492.48 222 488 217.52 488 212 Z
+      M 546 102
+      C 528.33 102 514 116.33 514 134
+      C 514 151.67 528.33 166 546 166
+      C 563.67 166 578 151.67 578 134
+      C 578 116.33 563.67 102 546 102 Z
+    "/>
+  </g>
+</svg>

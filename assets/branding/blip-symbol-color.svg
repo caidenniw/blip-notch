@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title-color">
+  <title id="title-color">Blip — Color Symbol</title>
+  <defs>
+    <!-- Cyan glow gradient for Blip's expressive eyes -->
+    <linearGradient id="eye-glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#70d6ff"/>
+      <stop offset="100%" stop-color="#00b4d8"/>
+    </linearGradient>
+    <!-- Island shell gradient: subtle deep obsidian to graphite -->
+    <linearGradient id="island-shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#181a20"/>
+      <stop offset="100%" stop-color="#0b0c10"/>
+    </linearGradient>
+  </defs>
+  <!-- Capsule island body -->
+  <rect x="24" y="64" width="208" height="128" rx="64" fill="url(#island-shell)"/>
+  <!-- Left Eye -->
+  <rect x="82" y="102" width="28" height="52" rx="14" fill="url(#eye-glow)"/>
+  <!-- Right Eye -->
+  <rect x="146" y="102" width="28" height="52" rx="14" fill="url(#eye-glow)"/>
+</svg>

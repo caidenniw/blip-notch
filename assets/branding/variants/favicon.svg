@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>Blip</title><g transform="translate(-14.98 -14.98) scale(1.117)">
+  <title id="title-sm">Blip — Small Cut</title>
+  <!-- Small-size cut (16-32px): wider eyes, bolder contours to prevent antialiasing blur -->
+  <path fill="#111116" fill-rule="evenodd" d="
+    M 88 58
+    H 168
+    C 206.66 58 238 89.34 238 128
+    C 238 166.66 206.66 198 168 198
+    H 88
+    C 49.34 198 18 166.66 18 128
+    C 18 89.34 49.34 58 88 58 Z
+    M 94 98
+    C 84.06 98 76 106.06 76 116
+    V 140
+    C 76 149.94 84.06 158 94 158
+    C 103.94 158 112 149.94 112 140
+    V 116
+    C 112 106.06 103.94 98 94 98 Z
+    M 162 98
+    C 152.06 98 144 106.06 144 116
+    V 140
+    C 144 149.94 152.06 158 162 158
+    C 171.94 158 180 149.94 180 140
+    V 116
+    C 180 106.06 171.94 98 162 98 Z
+  "/>
+</g></svg>

@@ -1,0 +1,27 @@
+<svg fill="#000000" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title"><title>Blip</title>
+  <title id="title">Blip — The Living Island</title>
+  <!-- Master symbol: single continuous compound path with clean evenodd eye cutouts -->
+  <path fill="#000000" fill-rule="evenodd" d="
+    M 88 64
+    H 168
+    C 203.35 64 232 92.65 232 128
+    C 232 163.35 203.35 192 168 192
+    H 88
+    C 52.65 192 24 163.35 24 128
+    C 24 92.65 52.65 64 88 64 Z
+    M 96 102
+    C 88.27 102 82 108.27 82 116
+    V 140
+    C 82 147.73 88.27 154 96 154
+    C 103.73 154 110 147.73 110 140
+    V 116
+    C 110 108.27 103.73 102 96 102 Z
+    M 160 102
+    C 152.27 102 146 108.27 146 116
+    V 140
+    C 146 147.73 152.27 154 160 154
+    C 167.73 154 174 147.73 174 140
+    V 116
+    C 174 108.27 167.73 102 160 102 Z
+  "/>
+</svg>
