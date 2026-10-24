@@ -329,7 +329,7 @@ pub async fn lyrics(
     duration: f64,
 ) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
-        .user_agent("Blip/0.1 (https://github.com/deni/blip)")
+        .user_agent("Blip/0.1 (https://github.com/caidenniw/blip-notch)")
         .build()
         .map_err(|e| e.to_string())?;
 

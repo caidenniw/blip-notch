@@ -486,6 +486,19 @@ pub fn shelf_from_clipboard() -> Result<Vec<serde_json::Value>, String> {
 }
 
 #[tauri::command]
+pub fn clipboard_text() -> Result<String, String> {
+    let t = arboard::Clipboard::new()
+        .map_err(|e| e.to_string())?
+        .get_text()
+        .map_err(|_| "clipboard tidak berisi teks".to_string())?;
+    let t = t.trim();
+    if t.is_empty() {
+        return Err("clipboard kosong".into());
+    }
+    Ok(t.chars().take(4000).collect())
+}
+
+#[tauri::command]
 pub fn shelf_copy(paths: Vec<String>) -> Result<(), String> {
     if paths.is_empty() {
         return Err("tidak ada file untuk disalin".into());

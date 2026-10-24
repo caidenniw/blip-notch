@@ -3,6 +3,8 @@ name = "blip"
 version = "0.1.0"
 description = "Blip - dynamic island AI assistant"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/caidenniw/blip-notch"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

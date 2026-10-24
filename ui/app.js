@@ -18,8 +18,13 @@
   const titleEl = $('#title');
   const detailEl = $('#detail');
   const wave = $('#wave');
-  const modelEl = $('#model');
   const ttsBtn = $('#ttsToggle');
+  const tdTime = $('#tdTime');
+  const tdGreet = $('#tdGreet');
+  const tdTask = $('#tdTask');
+  const tdWater = $('#tdWater');
+  const tdFocus = $('#tdFocus');
+  const nudgeBtn = $('#nudgeToggle');
   const mascot = $('#mascot');
   const artEl = $('#art');
   const miniArt = $('#miniArt');
@@ -88,8 +93,9 @@
   const PLAY_D = 'M8 5v14l11-7z';
   const PAUSE_D = 'M7 5h4v14H7zM13 5h4v14h-4z';
 
-  const PAGE_ORDER = ['music', 'focus', 'todo', 'water', 'shelf', 'chat'];
+  const PAGE_ORDER = ['today', 'music', 'focus', 'todo', 'water', 'shelf', 'chat'];
   const PAGE_LABEL = {
+    today: 'Hari ini',
     music: 'Musik',
     focus: 'Fokus',
     todo: 'Tugas',
@@ -98,6 +104,7 @@
     chat: 'Obrolan',
   };
   const PAGE_NAV = {
+    today: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
     music: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
     focus: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
     todo: '<path d="m5 12 4 4L19 6"/><path d="M5 5h14M5 19h14"/>',
@@ -117,6 +124,7 @@
     voice: [260, 132],
   };
   const OPEN = {
+    today: [460, 150],
     music: [460, 164],
     lyrics: [620, 164],
     focus: [460, 150],
@@ -176,7 +184,17 @@
   let compact = false;
   let ttsOn = true;
   let autoCollapseMs = 5000;
-  let history = [];
+  const savedChat = load('blip.chat', []);
+  let history = trimHistory(
+    (Array.isArray(savedChat) ? savedChat : []).filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'),
+    40
+  );
+  const memory = (() => {
+    const m = load('blip.memory', []);
+    return Array.isArray(m) ? m.filter(x => typeof x === 'string').slice(0, 20) : [];
+  })();
+  function saveChat() { save('blip.chat', trimHistory(history, 40)); }
+  function saveMemory() { save('blip.memory', memory); }
   let pending = null;
   let answerText = '';
   let openTimer = 0;
@@ -388,7 +406,10 @@
 
   function renderHistory() {
     messages.textContent = '';
-    for (const m of history) addMsg(m.role === 'user' ? 'user' : 'bot', m.content);
+    for (const m of history) {
+      const long = m.role === 'user' && m.content.length > 80;
+      addMsg(m.role === 'user' ? 'user' : 'bot', long ? m.content.split('\n')[0].slice(0, 80) + '…' : m.content);
+    }
   }
 
   function markPage() {
@@ -458,6 +479,7 @@
     pageChangedAt = Date.now();
     body.dataset.page = id;
     save('blip.page', id);
+    save('blip.pageAt', Date.now());
     if (state === 'open') {
       if (was === 'chat' || was === 'todo') invoke('release_focus').catch(() => {});
       if (id === 'chat') {
@@ -576,12 +598,13 @@
       if (state === 'answer' || pending || state === 'thinking') next = 'chat';
       else if (activities.media && activities.media.playing) next = 'music';
       else if (focus.runningUntil) next = 'focus';
-      else next = load('blip.page', 'chat');
+      else next = Date.now() - load('blip.pageAt', 0) > 1800000 ? 'today' : load('blip.page', 'today');
     }
     if (!vis.includes(next)) next = vis.includes('chat') ? 'chat' : vis[0];
     page = next;
     body.dataset.page = next;
     save('blip.page', next);
+    save('blip.pageAt', Date.now());
     markPage();
     go('open');
   }
@@ -707,7 +730,7 @@
     if (call) Promise.resolve(call).catch(err => alertState('gagal: ' + err, 3000));
   }
 
-  function send(text) {
+  function send(text, shown) {
     text = (text || '').trim();
     if (!text || pending) return;
     clearTimeout(collapseTimer);
@@ -720,17 +743,38 @@
       runIntent(intent);
       return;
     }
+    const mem = parseMemory(text);
+    if (mem) {
+      if (mem.type === 'remember') {
+        const t = mem.text.slice(0, 200);
+        const i = memory.findIndex(m => m.toLowerCase() === t.toLowerCase());
+        if (i >= 0) memory.splice(i, 1);
+        memory.unshift(t);
+        memory.length = Math.min(memory.length, 20);
+        saveMemory();
+        localReply(text, 'Oke, aku ingat.', 'diingat');
+      } else if (mem.type === 'forget') {
+        memory.length = 0;
+        saveMemory();
+        localReply(text, 'Sudah kulupakan semuanya.', 'dilupakan');
+      } else {
+        localReply(text, memory.length ? memory.map(m => '- ' + m).join('\n') : 'Belum ada yang kuingat.', 'ingatan');
+      }
+      return;
+    }
     const secs = parseTimer(text);
     if (secs) {
       addMsg('user', text);
       history.push({ role: 'user', content: text });
+      saveChat();
       input.value = '';
       input.style.height = 'auto';
       setTimer(secs);
       return;
     }
-    addMsg('user', text);
+    addMsg('user', shown || text);
     history.push({ role: 'user', content: text });
+    saveChat();
     input.value = '';
     input.style.height = 'auto';
     answerText = '';
@@ -747,7 +791,7 @@
 
     armWatch(id);
 
-    invoke('chat_send', { id, messages: history, speak: ttsOn || voice }).catch(err => onChatError({ id, error: String(err) }));
+    invoke('chat_send', { id, messages: trimHistory(history, 20), speak: ttsOn || voice, memory: memory.join('; ').slice(0, 800) }).catch(err => onChatError({ id, error: String(err) }));
   }
 
   function armWatch(id) {
@@ -787,6 +831,7 @@
     const text = pending.text.trim();
     if (pending.el) pending.el.textContent = text || '(kosong)';
     history.push({ role: 'assistant', content: text });
+    saveChat();
     pending = null;
     answerEl.textContent = text;
     if (voice && !e.payload.aborted) {
@@ -810,45 +855,6 @@
   listen('chat:error', e => {
     clearTimeout(chatWatch);
     onChatError(e.payload);
-  });
-
-  // Tools can run long; the Rust side has its own timeouts, so the no-text watchdog pauses meanwhile.
-  listen('tool:start', e => {
-    if (!pending || e.payload.id !== pending.id) return;
-    clearTimeout(chatWatch);
-    const label = e.payload.label + '...';
-    if (voice) vHint.textContent = label;
-    else if (pending.el && !pending.text) pending.el.textContent = label;
-    if (!voice && state !== 'open' && state !== 'answer') setTitle('Blip', label);
-  });
-  listen('tool:end', e => {
-    if (!pending || e.payload.id !== pending.id) return;
-    armWatch(pending.id);
-    if (voice) vHint.textContent = PHASE_HINT.think;
-  });
-  listen('tool:confirm', e => {
-    if (!pending || e.payload.id !== pending.id) return;
-    clearTimeout(chatWatch);
-    const el = pending.el;
-    if (!el) return;
-    const answer = ok => {
-      invoke('tool_confirm', { call: e.payload.call, ok }).catch(() => {});
-      el.textContent = ok ? 'menjalankan Hermes...' : 'dibatalkan';
-    };
-    const box = document.createElement('div');
-    box.className = 'confirm';
-    box.append(document.createTextNode('Jalankan Hermes: «' + e.payload.text + '»?'));
-    for (const [txt, ok] of [['Izinkan', true], ['Batal', false]]) {
-      const b = document.createElement('button');
-      b.textContent = txt;
-      if (ok) b.className = 'ok';
-      b.addEventListener('click', () => answer(ok));
-      box.append(b);
-    }
-    el.textContent = '';
-    el.append(box);
-    messages.scrollTop = messages.scrollHeight;
-    openNotch('chat', false); // also leaves voice mode; inputBusy() keeps the open panel from auto-closing while pending
   });
 
   function onChatError(p) {
@@ -1443,6 +1449,7 @@
   // ---------- focus ----------
   function saveFocus() {
     save('blip.focus', focus);
+    if (page === 'today') renderToday();
   }
 
   function renderFocus() {
@@ -1510,6 +1517,12 @@
     focus.runningUntil = null;
     if (was === 'focus') {
       focus.count += 1;
+      const flog = load('blip.focusLog', {}) || {};
+      const fk = dayKey(Date.now());
+      flog[fk] = (flog[fk] || 0) + 1;
+      for (const k of Object.keys(flog).sort().reverse().slice(14)) delete flog[k];
+      save('blip.focusLog', flog);
+      if (flog[fk] === 4) flashMood('cheer', 1600);
       focus.phase = focus.count % 4 === 0 ? 'long' : 'short';
     } else {
       focus.phase = 'focus';
@@ -1563,6 +1576,7 @@
   // ---------- to-do ----------
   function saveTodos() {
     save('blip.todos', todos);
+    if (page === 'today') renderToday();
   }
 
   function addTodo(text) {
@@ -1609,6 +1623,7 @@
         t.done = !t.done;
         t.doneAt = t.done ? Date.now() : null;
         if (t.done) t.notified = true;
+        if (t.done) flashMood('cheer', 1400);
         saveTodos();
         renderTodos();
       });
@@ -1708,6 +1723,7 @@
       // Refresh the soon/late badges, but never yank the inline editor out from under the user.
       renderTodos();
     }
+    if (state === 'open' && page === 'today') renderToday();
   }, 20000);
 
   // ---------- water ----------
@@ -1723,13 +1739,19 @@
     const keys = Object.keys(water.log).sort().reverse();
     for (const k of keys.slice(14)) delete water.log[k];
     save('blip.water', water);
+    if (page === 'today') renderToday();
   }
 
   function drink() {
+    const before = waterTotal();
     const k = dayKey(Date.now());
     (water.log[k] = water.log[k] || []).push({ t: Date.now(), ml: water.cup });
     saveWater();
     renderWater();
+    if (before < water.goal && waterTotal() >= water.goal) {
+      flashMood('cheer', 1800);
+      alertState('target minum tercapai', 3500, 'ok');
+    }
   }
 
   function renderWater() {
@@ -1799,6 +1821,47 @@
       alertState('waktunya minum air', 6000, 'ok');
     }
   }, 60000);
+
+  // ---------- today page ----------
+  function renderToday() {
+    const nt = nextTask(todos);
+    tdGreet.textContent = greeting(new Date().getHours());
+    tdTask.textContent = nt ? nt.text + (nt.dueAt ? ' · ' + dueText(nt.dueAt) : '') : 'semua selesai';
+    const total = waterTotal();
+    const pct = water.goal ? Math.min(100, Math.round((total / water.goal) * 100)) : 0;
+    tdWater.textContent = (total / 1000).toFixed(2) + ' / ' + (water.goal / 1000).toFixed(1) + ' L · ' + pct + '%';
+    tdFocus.textContent = focusToday() + ' sesi hari ini';
+  }
+  document.querySelectorAll('.tdrow').forEach(b => b.addEventListener('click', () => setPage(b.dataset.go)));
+
+  // ---------- proactive nudges ----------
+  let nudgeOn = load('blip.nudgeOn', true) !== false;
+  const nudgeShown = load('blip.nudges', {}) || {};
+  let batteryNow = null, pluggedNow = false, lastNudgeAt = 0;
+  function renderNudgeBtn() { nudgeBtn.textContent = 'nudge: ' + (nudgeOn ? 'on' : 'off'); }
+  nudgeBtn.addEventListener('click', () => { nudgeOn = !nudgeOn; save('blip.nudgeOn', nudgeOn); renderNudgeBtn(); });
+  renderNudgeBtn();
+  function nudgeTick() {
+    if (!nudgeOn || !['idle', 'live'].includes(state) || hover || voice) return;
+    const now = Date.now();
+    if (now - lastNudgeAt < 10 * 60000) return;
+    const n = pickNudge({
+      now,
+      hour: new Date().getHours(),
+      tasksLeft: todos.filter(t => !t.done).length,
+      battery: batteryNow,
+      plugged: pluggedNow,
+      shown: nudgeShown,
+    });
+    if (!n) return;
+    nudgeShown[n.id] = now;
+    lastNudgeAt = now;
+    save('blip.nudges', nudgeShown);
+    alertState(n.text, 6000, n.tone);
+    flashMood(n.mood, 2200);
+  }
+  setTimeout(nudgeTick, 4000);
+  setInterval(nudgeTick, 60000);
 
   // ---------- shelf ----------
   let shelfToastTimer = 0;
@@ -2093,6 +2156,8 @@
   listen('hud', e => showHud(e.payload));
 
   function setBatt(battery, plugged) {
+    batteryNow = battery;
+    pluggedNow = !!battery && !!plugged;
     if (battery == null) {
       battEl.style.display = 'none';
       battEl.textContent = '';
@@ -2204,11 +2269,56 @@
     ttsBtn.textContent = 'suara: ' + (ttsOn ? 'on' : 'off');
   });
 
+  // ---------- chat extras: local replies, quick chips ----------
+  function localReply(userText, botText, label) {
+    addMsg('user', userText);
+    addMsg('bot', botText);
+    history.push({ role: 'user', content: userText }, { role: 'assistant', content: botText });
+    saveChat();
+    input.value = '';
+    input.style.height = 'auto';
+    flashMood('happy', 1200);
+    if (state !== 'open') alertState(label, 1600, 'ok');
+  }
+
+  function focusToday() { return (load('blip.focusLog', {}) || {})[dayKey(Date.now())] || 0; }
+
+  function todaySummary() {
+    const left = todos.filter(t => !t.done).length;
+    const nt = nextTask(todos);
+    return `Tugas tersisa ${left}${nt ? ', berikutnya "' + nt.text + '"' : ''}; minum ${waterTotal()} dari ${water.goal} ml; sesi fokus hari ini ${focusToday()}.`;
+  }
+
+  const CLIP_Q = {
+    sum: ['Ringkas teks ini dalam 3 poin singkat:\n\n', 'Ringkas clipboard'],
+    tr: ['Terjemahkan ke bahasa Indonesia (atau ke Inggris jika sudah Indonesia):\n\n', 'Terjemah clipboard'],
+  };
+  $('.qchips').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-q]');
+    if (!b || pending) return;
+    const q = b.dataset.q;
+    if (q === 'day') {
+      send('Ini kondisi hariku: ' + todaySummary() + ' Beri ringkasan 2 kalimat dan satu saran.', 'Ringkas hariku');
+      return;
+    }
+    const [prefix, label] = CLIP_Q[q];
+    invoke('clipboard_text').then(t => send(prefix + t, label)).catch(e => alertState('gagal: ' + e, 3000));
+  });
+
+  $('#chatClear').addEventListener('click', () => {
+    if (pending) return;
+    history.length = 0;
+    saveChat();
+    messages.textContent = '';
+    applySize();
+  });
+
   // ---------- clock ----------
   function tickClock() {
     const d = new Date();
     const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     clockEl.textContent = hm;
+    tdTime.textContent = hm;
     icTime.textContent = hm;
     icDate.textContent = d.toLocaleDateString('id-ID', {
       weekday: 'short',
@@ -2256,7 +2366,11 @@
     setTimeout(() => {
       if (state === 'idle' && !voice && !hover && !compact &&
           body.classList.contains('eyesmode') && !body.classList.contains('sleepy')) {
-        flashMood(['look-l', 'look-r', 'happy', 'look-l'][Math.floor(Math.random() * 4)], 900);
+        const h = new Date().getHours();
+        const pool = ['look-l', 'look-r', 'happy', 'look-l'];
+        if (h >= 23 || h < 5) pool.push('tired', 'tired');
+        if (batteryNow != null && batteryNow <= 20 && !pluggedNow) pool.push('scared');
+        flashMood(pool[Math.floor(Math.random() * pool.length)], 900);
       }
       idleFun();
     }, 6000 + Math.random() * 6000);
@@ -2272,11 +2386,13 @@
   renderTodos();
   renderWater();
   renderShelf();
+  renderHistory();
+  renderToday();
   armSleep();
 
   invoke('info')
     .then(i => {
-      modelEl.textContent = i.model + ' | stt: ' + i.stt;
+      chatFooterEl.title = i.model + ' | stt: ' + i.stt;
       ttsOn = !!i.tts;
       ttsEnabled = !!i.tts;
       ttsBtn.textContent = 'suara: ' + (ttsOn ? 'on' : 'off');
@@ -2294,6 +2410,7 @@
       renderMusic();
       fetchLyrics();
     } else if (page === 'focus') renderFocus();
+    else if (page === 'today') renderToday();
     else if (page === 'todo') renderTodos();
     else if (page === 'water') renderWater();
     else if (page === 'shelf') renderShelf();

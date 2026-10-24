@@ -9,7 +9,6 @@ mod media;
 mod rec;
 mod server;
 mod sys;
-mod tools;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -32,7 +31,6 @@ fn main() {
             island::release_focus,
             ai::chat_send,
             ai::chat_abort,
-            tools::tool_confirm,
             ai::stop_speak,
             ai::beep,
             rec::rec_start,
@@ -45,6 +43,7 @@ fn main() {
             sys::shelf_info,
             sys::open_path,
             sys::shelf_from_clipboard,
+            sys::clipboard_text,
             sys::shelf_copy,
             sys::reveal_path,
             sys::shelf_drag_out,
@@ -96,7 +95,8 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
     let quit = MenuItem::with_id(app, "quit", "Keluar", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &autostart, &sep, &quit])?;
+    let cfg = MenuItem::with_id(app, "config", "Buka config", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &autostart, &cfg, &sep, &quit])?;
     let icon = app.default_window_icon().cloned();
     let mut builder = TrayIconBuilder::with_id("blip")
         .menu(&menu)
@@ -115,6 +115,9 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
                 let manager = app.autolaunch();
                 let enabled = manager.is_enabled().unwrap_or(false);
                 let _ = if enabled { manager.disable() } else { manager.enable() };
+            }
+            "config" => {
+                let _ = std::process::Command::new("notepad.exe").arg(crate::conf::config_path()).spawn();
             }
             "quit" => app.exit(0),
             _ => {}

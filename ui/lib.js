@@ -248,10 +248,59 @@ function level01(rms, gain) {
   return v > 0 ? Math.min(1, v) : 0; // NaN and negatives -> 0
 }
 
+function trimHistory(h, n) {
+  const out = h.slice(-n);
+  while (out.length && out[0].role !== 'user') out.shift();
+  return out;
+}
+
+function parseMemory(text) {
+  let m = /^\s*(?:tolong\s+)?ingat(?:lah)?\s+(?:bahwa\s+)?(.{3,200}?)\s*$/i.exec(text);
+  if (m) return m[1].endsWith('?') ? null : { type: 'remember', text: m[1] };
+  if (/^\s*lupakan\s+(?:semua|semuanya)\s*$/i.test(text)) return { type: 'forget' };
+  if (/^\s*(?:apa\s+(?:yang\s+)?kamu\s+ingat|kamu\s+ingat\s+apa)\s*\??\s*$/i.test(text)) return { type: 'recall' };
+  return null;
+}
+
+function greeting(hour) {
+  return hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
+}
+
+function nextTask(todos) {
+  const open = todos.filter(t => !t.done);
+  const due = open.filter(t => t.dueAt);
+  if (due.length) return due.reduce((a, b) => (b.dueAt < a.dueAt ? b : a));
+  return open[0] || null;
+}
+
+// First matching proactive nudge, or null. `c.shown` maps nudge id -> last shown ms (per-id cooldown).
+function pickNudge(c) {
+  const ok = (id, ms) => !c.shown[id] || c.now - c.shown[id] >= ms;
+  if (c.battery != null && c.battery <= 20 && !c.plugged && ok('battery', 30 * 60000)) {
+    return { id: 'battery', text: `baterai ${c.battery}%, colok charger`, tone: '', mood: 'scared' };
+  }
+  if ((c.hour >= 23 || c.hour < 4) && ok('night', 8 * 3600000)) {
+    return { id: 'night', text: 'sudah larut, jangan lupa istirahat', tone: 'ok', mood: 'tired' };
+  }
+  if (c.hour >= 17 && c.hour < 19 && c.tasksLeft > 0 && ok('evening', 12 * 3600000)) {
+    return { id: 'evening', text: `${c.tasksLeft} tugas belum selesai hari ini`, tone: 'ok', mood: 'happy' };
+  }
+  if (c.hour >= 5 && c.hour < 22 && ok('greet', 12 * 3600000)) {
+    return {
+      id: 'greet',
+      text: `${greeting(c.hour)}. ${c.tasksLeft ? c.tasksLeft + ' tugas menunggu' : 'belum ada tugas'}`,
+      tone: 'ok',
+      mood: 'cheer',
+    };
+  }
+  return null;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     parseTimer, fmt, fmtTrack, trackPos, APPS, parseIntent, INTENT_LABEL,
     normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
     avgColor, fileKind, chatHeightFor, level01,
+    trimHistory, parseMemory, greeting, nextTask, pickNudge,
   };
 }

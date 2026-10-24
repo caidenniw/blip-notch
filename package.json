@@ -3,9 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "description": "Blip - dynamic island AI assistant for Windows",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caidenniw/blip-notch.git"
+  },
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "tauri": "tauri",
+    "test": "node ui/app.test.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

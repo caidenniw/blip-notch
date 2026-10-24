@@ -46,6 +46,16 @@
         </div>
 
         <div class="pages">
+          <section class="pg today-pg" data-p="today">
+            <div class="tleft"><b id="tdTime">--:--</b><span id="tdGreet"></span></div>
+            <div class="tright">
+              <button class="tdrow" data-go="todo"><span class="k">Tugas</span><span id="tdTask"></span></button>
+              <button class="tdrow" data-go="water"><span class="k">Minum</span><span id="tdWater"></span></button>
+              <button class="tdrow" data-go="focus"><span class="k">Fokus</span><span id="tdFocus"></span></button>
+            </div>
+            <button class="link tnudge" id="nudgeToggle">nudge: on</button>
+          </section>
+
           <section class="pg" data-p="music">
             <div class="mleft">
               <div class="mrow">
@@ -143,7 +153,8 @@
               <button class="icon primary" id="send" title="Kirim" aria-label="Kirim"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
             </div>
             <div class="footer">
-              <span id="model"></span>
+              <span class="qchips"><button class="link" data-q="sum">ringkas clipboard</button><button class="link" data-q="tr">terjemah clipboard</button><button class="link" data-q="day">hari ini</button></span>
+              <button class="link" id="chatClear">hapus</button>
               <button class="link" id="ttsToggle">suara: on</button>
             </div>
           </section>

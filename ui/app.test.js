@@ -4,6 +4,7 @@ const {
   parseTimer, parseIntent, fmt, fmtTrack, trackPos,
   normKey, parseTrack, appName, parseLrc, lrcIndex, parseTodo, dayKey, waterBuckets, fmtSize,
   avgColor, fileKind, chatHeightFor, level01,
+  trimHistory, parseMemory, greeting, nextTask, pickNudge,
 } = require('./lib.js');
 
 strictEqual(parseTimer('timer 5 menit'), 300);
@@ -122,6 +123,33 @@ strictEqual(level01(0.1, 5), 0.5);
 strictEqual(level01(0.5, 5), 1);
 strictEqual(level01(-1, 5), 0);
 strictEqual(level01(NaN, 5), 0);
+
+const H = [{ role: 'assistant', content: 'a' }, { role: 'user', content: 'b' }, { role: 'assistant', content: 'c' }];
+deepStrictEqual(trimHistory(H, 2), [H[1], H[2]]);
+deepStrictEqual(trimHistory(H, 1), []);
+
+deepStrictEqual(parseMemory('ingat nama saya Caiden'), { type: 'remember', text: 'nama saya Caiden' });
+strictEqual(parseMemory('ingat bahwa saya suka kopi').text, 'saya suka kopi');
+strictEqual(parseMemory('kamu ingat tidak kemarin?'), null);
+strictEqual(parseMemory('ingat apa kemarin?'), null);
+deepStrictEqual(parseMemory('lupakan semua'), { type: 'forget' });
+deepStrictEqual(parseMemory('apa yang kamu ingat?'), { type: 'recall' });
+
+deepStrictEqual([5, 12, 16, 20].map(greeting), ['Selamat pagi', 'Selamat siang', 'Selamat sore', 'Selamat malam']);
+
+const T = [{ text: 'x', done: false }, { text: 'late', done: false, dueAt: 200 }, { text: 'soon', done: false, dueAt: 100 }];
+strictEqual(nextTask(T).text, 'soon');
+strictEqual(nextTask([T[0], { text: 'y', done: false }]).text, 'x');
+strictEqual(nextTask([{ text: 'd', done: true }]), null);
+
+const N = 1e12;
+const base = { now: N, hour: 12, tasksLeft: 2, battery: 15, plugged: false, shown: {} };
+strictEqual(pickNudge(base).id, 'battery');
+strictEqual(pickNudge({ ...base, shown: { battery: N - 60000 } }).id, 'greet');
+strictEqual(pickNudge({ ...base, plugged: true }).id, 'greet');
+strictEqual(pickNudge({ ...base, battery: null, hour: 23 }).id, 'night');
+strictEqual(pickNudge({ ...base, battery: null, hour: 17, shown: { greet: N - 1000 } }).id, 'evening');
+strictEqual(pickNudge({ ...base, battery: null, hour: 3, shown: { night: N - 1000 } }), null);
 
 
 console.log('ok');
