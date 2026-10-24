@@ -7,6 +7,12 @@ A *dynamic-island* AI assistant for Windows 10/11. Hover the notch and a panel o
 Built with Tauri 2 (Rust + WebView2), not Electron. MIT licensed. The UI and the default persona are in Indonesian.
 
 <p align="center">
+  <img src="docs/screenshots/music-compact.png" alt="Compact notch while music plays" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/music.png" alt="Music page with synced lyrics" />
+</p>
+<p align="center">
   <img src="docs/screenshots/today.png" alt="Today page" width="48%" />
   <img src="docs/screenshots/chat.png" alt="Chat page" width="48%" />
   <img src="docs/screenshots/tasks.png" alt="Tasks page" width="48%" />
