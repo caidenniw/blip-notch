@@ -6,6 +6,13 @@ Asisten AI berbentuk *dynamic island* untuk Windows. Arahkan kursor ke notch: pa
 
 Dibangun dengan Tauri 2 (Rust + WebView2) — bukan Electron. Lisensi MIT.
 
+<p align="center">
+  <img src="docs/screenshots/today.png" alt="Halaman Hari ini" width="48%" />
+  <img src="docs/screenshots/chat.png" alt="Halaman Obrolan" width="48%" />
+  <img src="docs/screenshots/tasks.png" alt="Halaman Tugas" width="48%" />
+  <img src="docs/screenshots/water.png" alt="Halaman Minum" width="48%" />
+</p>
+
 ## Instal
 
 1. Unduh `Blip_0.1.0_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).

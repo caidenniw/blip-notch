@@ -6,6 +6,13 @@ A *dynamic-island* AI assistant for Windows 10/11. Hover the notch and a panel o
 
 Built with Tauri 2 (Rust + WebView2), not Electron. MIT licensed. The UI and the default persona are in Indonesian.
 
+<p align="center">
+  <img src="docs/screenshots/today.png" alt="Today page" width="48%" />
+  <img src="docs/screenshots/chat.png" alt="Chat page" width="48%" />
+  <img src="docs/screenshots/tasks.png" alt="Tasks page" width="48%" />
+  <img src="docs/screenshots/water.png" alt="Water page" width="48%" />
+</p>
+
 ## Features
 
 - Hover panel with pages: Today, Music (cover, seek bar, synced lyrics), Focus (Pomodoro), Tasks (with reminders), Water, Shelf, Chat
