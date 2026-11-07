@@ -35,6 +35,11 @@ pub struct TextStyle {
     /// `tnum` OpenType feature.
     pub tabular: bool,
     pub italic: bool,
+    /// `letter-spacing` px.
+    pub letter_spacing: f32,
+    pub strike: bool,
+    /// `word-break: break-word`: emergency breaks inside words.
+    pub break_word: bool,
 }
 
 impl Default for TextStyle {
@@ -48,6 +53,9 @@ impl Default for TextStyle {
             align: Align::Left,
             tabular: false,
             italic: false,
+            letter_spacing: 0.0,
+            strike: false,
+            break_word: false,
         }
     }
 }
@@ -63,6 +71,9 @@ struct Key {
     align: Align,
     tabular: bool,
     italic: bool,
+    letter_spacing: u32,
+    strike: bool,
+    break_word: bool,
     max_w: i32, // half-pixels
     max_h: u32,
 }
@@ -77,6 +88,8 @@ pub struct Text {
     family: HSTRING,
     family_name: String,
     cache: HashMap<Key, Entry>,
+    /// `font_line` per (size bits, weight, italic): one DirectWrite layout each, ever.
+    line_cache: std::cell::RefCell<HashMap<(u32, u16, bool), (f32, f32)>>,
 }
 
 impl Text {
@@ -98,6 +111,7 @@ impl Text {
                 family: HSTRING::from(family_name),
                 family_name: family_name.to_string(),
                 cache: HashMap::new(),
+                line_cache: Default::default(),
             })
         }
     }
@@ -121,6 +135,9 @@ impl Text {
             align: style.align,
             tabular: style.tabular,
             italic: style.italic,
+            letter_spacing: style.letter_spacing.to_bits(),
+            strike: style.strike,
+            break_word: style.break_word,
             max_w: (max_w * 2.0) as i32,
             max_h: max_h.to_bits(),
         };
@@ -154,7 +171,22 @@ impl Text {
                 Align::Right => DWRITE_TEXT_ALIGNMENT_TRAILING,
             })?;
             let no_wrap = s.ellipsis || !s.wrap;
-            layout.SetWordWrapping(if no_wrap { DWRITE_WORD_WRAPPING_NO_WRAP } else { DWRITE_WORD_WRAPPING_WRAP })?;
+            layout.SetWordWrapping(if no_wrap {
+                DWRITE_WORD_WRAPPING_NO_WRAP
+            } else if s.break_word {
+                DWRITE_WORD_WRAPPING_EMERGENCY_BREAK
+            } else {
+                DWRITE_WORD_WRAPPING_WRAP
+            })?;
+            let all = DWRITE_TEXT_RANGE { startPosition: 0, length: wide.len() as u32 };
+            if s.letter_spacing != 0.0 {
+                if let Ok(l1) = layout.cast::<IDWriteTextLayout1>() {
+                    l1.SetCharacterSpacing(0.0, s.letter_spacing, 0.0, all)?;
+                }
+            }
+            if s.strike {
+                layout.SetStrikethrough(true, all)?;
+            }
             if s.ellipsis {
                 let sign = self.factory.CreateEllipsisTrimmingSign(&format)?;
                 let trimming = DWRITE_TRIMMING {
@@ -165,7 +197,9 @@ impl Text {
                 layout.SetTrimming(&trimming, &sign)?;
             }
             if let Some(h) = s.line_height {
-                layout.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, h, h * 0.8)?;
+                // CSS half-leading: the font's own line box is centred inside `h`.
+                let (h0, b0) = self.font_line(s, size);
+                layout.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, h, b0 + (h - h0) / 2.0)?;
             }
             if s.tabular && !wide.is_empty() {
                 let typo = self.factory.CreateTypography()?;
@@ -180,6 +214,43 @@ impl Text {
             }
             Ok(layout)
         }
+    }
+
+    /// Default `(line height, baseline)` of the font at `size` (CSS `line-height: normal`).
+    pub fn font_line(&self, s: &TextStyle, size: f32) -> (f32, f32) {
+        let key = (size.to_bits(), s.weight, s.italic);
+        if let Some(v) = self.line_cache.borrow().get(&key) {
+            return *v;
+        }
+        unsafe {
+            let Ok(format) = self.factory.CreateTextFormat(
+                &self.family,
+                None::<&IDWriteFontCollection>,
+                DWRITE_FONT_WEIGHT(s.weight as i32),
+                if s.italic { DWRITE_FONT_STYLE_ITALIC } else { DWRITE_FONT_STYLE_NORMAL },
+                DWRITE_FONT_STRETCH_NORMAL,
+                size,
+                &HSTRING::from("en-us"),
+            ) else {
+                return (size * 1.33, size);
+            };
+            let wide: Vec<u16> = "x".encode_utf16().collect();
+            let Ok(l) = self.factory.CreateTextLayout(&wide, &format, BIG, BIG) else { return (size * 1.33, size) };
+            let mut m = [DWRITE_LINE_METRICS::default(); 1];
+            let mut n = 0;
+            if l.GetLineMetrics(Some(&mut m), &mut n).is_err() {
+                return (size * 1.33, size);
+            }
+            let v = (m[0].height, m[0].baseline);
+            self.line_cache.borrow_mut().insert(key, v);
+            v
+        }
+    }
+
+    /// Narrowest width the text can wrap to (CSS min-content).
+    pub fn min_width(&mut self, text: &str, style: &TextStyle) -> f32 {
+        let layout = self.layout(text, style, BIG, BIG);
+        unsafe { layout.DetermineMinWidth() }.unwrap_or(0.0)
     }
 
     /// Drop layouts unused for 5 s. Call occasionally (e.g. on the 250 ms tick).

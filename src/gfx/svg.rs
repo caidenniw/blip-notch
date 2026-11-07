@@ -147,19 +147,19 @@ pub fn parse_svg_path(d: &str) -> Vec<Seg> {
     let mut last_ctrl_y = 0.0f32;
     let mut last_cmd = ' ';
 
-    while let Some(cmd) = lex.next_cmd().or_else(|| {
-        if last_cmd != ' ' && last_cmd != 'Z' && last_cmd != 'z' {
-            if last_cmd == 'M' {
-                Some('L')
-            } else if last_cmd == 'm' {
-                Some('l')
-            } else {
-                Some(last_cmd)
-            }
-        } else {
-            None
-        }
-    }) {
+    loop {
+        let explicit = lex.next_cmd();
+        let cmd = match explicit {
+            Some(c) => c,
+            // Implicit repeat of the previous command; stop when nothing is left to consume.
+            None if lex.pos < lex.bytes.len() && !matches!(last_cmd, ' ' | 'Z' | 'z') => match last_cmd {
+                'M' => 'L',
+                'm' => 'l',
+                c => c,
+            },
+            None => break,
+        };
+        let pos_before_args = lex.pos;
         match cmd {
             'M' => {
                 if let (Some(x), Some(y)) = (lex.next_number(), lex.next_number()) {
@@ -403,6 +403,10 @@ pub fn parse_svg_path(d: &str) -> Vec<Seg> {
                 last_cmd = ' ';
             }
         }
+        // An implicit repeat that consumed nothing means malformed data: stop instead of spinning.
+        if explicit.is_none() && lex.pos == pos_before_args {
+            break;
+        }
     }
     segs
 }
@@ -608,5 +612,20 @@ mod tests {
         assert!(!s.is_empty());
         assert_eq!(s[0], Seg::MoveTo(4.0, 14.0));
         assert!(matches!(s[1], Seg::ArcTo { rx, ry, large: false, sweep: false, .. } if (rx - 2.0).abs() < 1e-4 && (ry - 2.0).abs() < 1e-4));
+    }
+
+    /// Every path in the UI terminates (an implicit command that consumes nothing used to spin).
+    #[test]
+    fn ui_paths_terminate() {
+        let src = concat!(include_str!("../../ui/app.js"), include_str!("../../ui/index.html"));
+        let re = regex::Regex::new(r#"\sd="([^"]+)""#).unwrap();
+        let mut n = 0;
+        for c in re.captures_iter(src) {
+            assert!(!parse_svg_path(&c[1]).is_empty(), "{}", &c[1]);
+            n += 1;
+        }
+        assert!(n > 40, "{n}");
+        assert_eq!(parse_svg_path("M1 1 L2 2 x"), vec![Seg::MoveTo(1.0, 1.0), Seg::LineTo(2.0, 2.0)]);
+        assert_eq!(parse_svg_path("M1 1 2"), vec![Seg::MoveTo(1.0, 1.0)]);
     }
 }

@@ -4,7 +4,7 @@
 
 Asisten AI berbentuk *dynamic island* untuk Windows. Arahkan kursor ke notch: panel membuka halaman Hari ini, Musik, Fokus, Tugas, Minum, Shelf, dan Obrolan (dot + panah, scroll wheel). Tekan tombol Copilot: island mendengar, menjawab dengan teks + suara, lalu mengecil. Saat mouse keluar, panel menutup kecuali sedang mengetik atau AI menjawab.
 
-Dibangun dengan Tauri 2 (Rust + WebView2) — bukan Electron. Lisensi MIT.
+Host native Rust: QuickJS menjalankan JavaScript UI asli, taffy menghitung layout DOM/CSS, dan Direct2D/DirectWrite menggambar layered window Win32. Tanpa proses WebView2 atau Electron. Lisensi MIT.
 
 <p align="center">
   <img src="docs/screenshots/music-compact.png" alt="Notch ringkas saat musik diputar" />
@@ -29,7 +29,7 @@ Dibangun dengan Tauri 2 (Rust + WebView2) — bukan Electron. Lisensi MIT.
 1. Unduh `Blip_0.1.0_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
 2. Installer belum ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 3. Jalankan Blip sekali. Aplikasi membuat `%APPDATA%\Blip\blip.config.json`.
-4. Klik ikon tray -> "Buka config", isi `router.apiKey` (lihat Setup), simpan, lalu restart Blip.
+4. Buka Pengaturan (ikon gear di header notch atau tray -> "Pengaturan…"), tempel API key di bagian AI, lalu Tes koneksi.
 
 ## Setup
 
@@ -102,10 +102,12 @@ Obrolan teks jalan tanpa bagian ini.
 | Hover (default) | buka halaman Hari ini bila panel terakhir dibuka > 30 mnt lalu |
 | HUD | volume, Caps Lock, charger/baterai, bahasa keyboard, status internet, perangkat audio |
 | Full-screen | notch otomatis bersembunyi saat aplikasi atau game layar penuh berjalan |
-| `Ctrl+Alt+B` | sama dengan tap tombol Copilot |
+| `Ctrl+Alt+B` (bisa diganti di Pengaturan -> Sistem) | sama dengan tap tombol Copilot |
 | `Ctrl+Alt+Q` | keluar |
 
-Tray: Buka/Tutup, Mulai saat login, Buka config, Keluar.
+Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
+
+Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
 
 Perintah lokal (suara atau teks, tanpa LLM, maks 7 kata): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute` (`banget` = 20%), `volume 50` (0-100), `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <judul> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <teks> [@14:30]`.
 
@@ -140,20 +142,24 @@ Contoh hook Claude Code (`~/.claude/settings.json`):
 
 Prasyarat:
 
-- Windows 10/11 dengan WebView2 (sudah ada di Windows 11)
+- Windows 10/11 (tidak memerlukan WebView2)
 - Rust: `winget install Rustlang.Rustup`, lalu `rustup default stable-x86_64-pc-windows-msvc`
 - Visual Studio 2022 Build Tools + C++ workload:
   `winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`
-- Node.js 18+ (hanya untuk Tauri CLI)
+- Node.js dan Microsoft Edge hanya untuk harness screenshot pembanding
 
-```
-npm install
-npm run dev      # mode pengembangan
-npm test         # tes fungsi UI
-npm run build    # installer: src-tauri\target\release\bundle\nsis\Blip_0.1.0_x64-setup.exe
+```powershell
+cargo run
+cargo test
+cargo build --release    # target\release\blip.exe
+powershell -File tools\ref\run.ps1
 ```
 
-Build pertama mengunduh NSIS (butuh internet). Tes Rust: `cargo test --manifest-path src-tauri/Cargo.toml`.
+Harness membandingkan 16 snapshot native dengan headless Edge pada 640×460; setiap skenario harus di bawah 1,5% piksel berbeda. Executable menyertakan `ui/index.html`, `ui/style.css`, `ui/lib.js`, dan `ui/app.js` asli, bukan terjemahan UI manual ke Rust.
+
+Penyimpanan UI memakai `%APPDATA%\Blip\localstorage.json`, terpisah dari `blip.config.json`. `state.json` dari port native sebelumnya dibiarkan dan tidak dimigrasi. Batas yang diketahui: tanpa panah spinner input angka, scrollbar tipis pada jawaban, dan seleksi teks terbatas satu bubble.
+
+Frame animasi mengikuti refresh rate monitor (60/120/144 Hz) lewat `DwmFlush`; saat tidak ada animasi, timer Win32 waitable beresolusi tinggi hanya bangun untuk timer JS, caret, dan penyimpanan, sehingga CPU idle mendekati nol. Cascade CSS yang tidak berubah memakai cache antarframe animasi, dan animasi yang hanya mengubah tampilan tidak menghitung ulang layout. Semua build bisa mencatat durasi update/present per frame ke `%APPDATA%\Blip\blip.log` melalui `BLIP_PROFILE_FRAMES=1`; hasilnya diagnostik, bukan jaminan FPS.
 
 ## Privasi
 

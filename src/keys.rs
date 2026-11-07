@@ -1,5 +1,6 @@
 use crate::{conf, rec};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use crate::bus::{self, DictatePhase, Event};
@@ -12,6 +13,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const VK_RCONTROL: u32 = 0xA3;
 const LLKHF_INJECTED: u32 = 0x10;
+
+/// Hold threshold and dictate key, set from config by `conf::apply` (0 = dictate off).
+pub static HOLD_MS: AtomicU64 = AtomicU64::new(300);
+pub static DICTATE_VK: AtomicU32 = AtomicU32::new(VK_RCONTROL);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum KeyOut {
@@ -34,8 +39,8 @@ impl Default for KeyMachine {
 }
 
 impl KeyMachine {
-    pub fn feed(&mut self, vk: u32, down: bool, now: Instant, _hold_ms: u64) -> Option<KeyOut> {
-        if vk == VK_RCONTROL {
+    pub fn feed(&mut self, vk: u32, down: bool, now: Instant, key: u32) -> Option<KeyOut> {
+        if key != 0 && vk == key {
             if down {
                 if self.down {
                     return None; // auto-repeat
@@ -99,7 +104,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 let out = MACHINE
                     .lock()
                     .unwrap()
-                    .feed(kb.vkCode, down, Instant::now(), conf::get().ui.hold_ms);
+                    .feed(kb.vkCode, down, Instant::now(), DICTATE_VK.load(Relaxed));
                 if let Some(o) = out {
                     if let Some(tx) = TX.get() {
                         let _ = tx.send(o);
@@ -139,7 +144,7 @@ pub fn start() {
         let out = MACHINE
             .lock()
             .unwrap()
-            .tick(Instant::now(), conf::get().ui.hold_ms);
+            .tick(Instant::now(), HOLD_MS.load(Relaxed));
         if let Some(o) = out {
             if let Some(tx) = TX.get() {
                 let _ = tx.send(o);
@@ -173,38 +178,47 @@ mod tests {
     fn tap_is_tap() {
         let mut m = KeyMachine::default();
         let t0 = Instant::now();
-        assert_eq!(m.feed(VK_RCONTROL, true, t0, 300), None);
-        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(100), 300), Some(KeyOut::Tap));
+        assert_eq!(m.feed(VK_RCONTROL, true, t0, VK_RCONTROL), None);
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(100), VK_RCONTROL), Some(KeyOut::Tap));
     }
 
     #[test]
     fn hold_requires_tick_and_ends() {
         let mut m = KeyMachine::default();
         let t0 = Instant::now();
-        assert_eq!(m.feed(VK_RCONTROL, true, t0, 300), None);
+        assert_eq!(m.feed(VK_RCONTROL, true, t0, VK_RCONTROL), None);
         assert_eq!(m.tick(t0 + Duration::from_millis(100), 300), None);
         assert_eq!(m.tick(t0 + Duration::from_millis(500), 300), Some(KeyOut::HoldStart));
-        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(600), 300), Some(KeyOut::HoldEnd));
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(600), VK_RCONTROL), Some(KeyOut::HoldEnd));
     }
 
     #[test]
     fn other_key_cancels() {
         let mut m = KeyMachine::default();
         let t0 = Instant::now();
-        assert_eq!(m.feed(VK_RCONTROL, true, t0, 300), None);
-        assert_eq!(m.feed(0x43, true, t0 + Duration::from_millis(30), 300), None); // 'C'
-        assert_eq!(m.feed(0x43, false, t0 + Duration::from_millis(50), 300), None);
+        assert_eq!(m.feed(VK_RCONTROL, true, t0, VK_RCONTROL), None);
+        assert_eq!(m.feed(0x43, true, t0 + Duration::from_millis(30), VK_RCONTROL), None); // 'C'
+        assert_eq!(m.feed(0x43, false, t0 + Duration::from_millis(50), VK_RCONTROL), None);
         assert_eq!(m.tick(t0 + Duration::from_millis(500), 300), None);
-        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(600), 300), None);
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(600), VK_RCONTROL), None);
     }
 
     #[test]
     fn auto_repeat_is_ignored() {
         let mut m = KeyMachine::default();
         let t0 = Instant::now();
-        assert_eq!(m.feed(VK_RCONTROL, true, t0, 300), None);
-        assert_eq!(m.feed(VK_RCONTROL, true, t0 + Duration::from_millis(40), 300), None);
-        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(80), 300), Some(KeyOut::Tap));
-        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(90), 300), None);
+        assert_eq!(m.feed(VK_RCONTROL, true, t0, VK_RCONTROL), None);
+        assert_eq!(m.feed(VK_RCONTROL, true, t0 + Duration::from_millis(40), VK_RCONTROL), None);
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(80), VK_RCONTROL), Some(KeyOut::Tap));
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(90), VK_RCONTROL), None);
+    }
+
+    #[test]
+    fn dictate_off_ignores_key() {
+        let mut m = KeyMachine::default();
+        let t0 = Instant::now();
+        assert_eq!(m.feed(VK_RCONTROL, true, t0, 0), None);
+        assert_eq!(m.tick(t0 + Duration::from_millis(500), 300), None);
+        assert_eq!(m.feed(VK_RCONTROL, false, t0 + Duration::from_millis(600), 0), None);
     }
 }

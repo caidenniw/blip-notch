@@ -1,6 +1,5 @@
 //! WIC image decode -> D2D bitmap, plus cover-art average colour (port of `avgColor` in ui/lib.js).
 //! COM must already be initialised on the calling thread.
-use windows::core::Interface;
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap1;
 use windows::Win32::Graphics::Direct2D::ID2D1DeviceContext;
 use windows::Win32::Graphics::Imaging::*;
@@ -83,6 +82,53 @@ pub fn decode_to_bitmap(
         })();
 
         Some((bitmap, tint))
+    }
+}
+
+/// 8x8 straight-alpha RGBA Fant downscale of an encoded image (the old UI's 8x8 canvas).
+pub fn tint_pixels(bytes: &[u8]) -> Option<Vec<u8>> {
+    unsafe {
+        let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
+        let stream = factory.CreateStream().ok()?;
+        stream.InitializeFromMemory(bytes).ok()?;
+        let decoder = factory.CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnDemand).ok()?;
+        let frame = decoder.GetFrame(0).ok()?;
+        let small = factory.CreateBitmapScaler().ok()?;
+        small.Initialize(&frame, 8, 8, WICBitmapInterpolationModeFant).ok()?;
+        let rgba = factory.CreateFormatConverter().ok()?;
+        rgba.Initialize(&small, &GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, None::<&IWICPalette>, 0.0, WICBitmapPaletteTypeCustom)
+            .ok()?;
+        let mut px = vec![0u8; 8 * 8 * 4];
+        rgba.CopyPixels(std::ptr::null(), 8 * 4, &mut px).ok()?;
+        Some(px)
+    }
+}
+
+/// Decodes an encoded image into a premultiplied BGRA D2D bitmap.
+pub fn decode(dc: &ID2D1DeviceContext, bytes: &[u8]) -> Option<ID2D1Bitmap1> {
+    decode_to_bitmap(dc, bytes).map(|(b, _)| b)
+}
+
+/// Writes straight-alpha RGBA pixels as PNG.
+pub fn write_png(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> windows::core::Result<()> {
+    unsafe {
+        let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let stream = factory.CreateStream()?;
+        stream.InitializeFromFilename(&windows::core::HSTRING::from(path.as_os_str()), 0x40000000 /* GENERIC_WRITE */)?;
+        let enc = factory.CreateEncoder(&GUID_ContainerFormatPng, std::ptr::null())?;
+        enc.Initialize(&stream, WICBitmapEncoderNoCache)?;
+        let mut frame = None;
+        enc.CreateNewFrame(&mut frame, std::ptr::null_mut())?;
+        let frame = frame.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
+        frame.Initialize(None)?;
+        frame.SetSize(w, h)?;
+        let mut fmt = GUID_WICPixelFormat32bppBGRA;
+        frame.SetPixelFormat(&mut fmt)?;
+        let bgra: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
+        frame.WritePixels(h, w * 4, &bgra)?;
+        frame.Commit()?;
+        enc.Commit()?;
+        Ok(())
     }
 }
 

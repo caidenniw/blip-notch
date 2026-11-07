@@ -9,7 +9,7 @@ pub const WM_APP_TRAY: u32 = WM_APP + 3;
 
 pub const CMD_TOGGLE: usize = 101;
 pub const CMD_AUTOSTART: usize = 102;
-pub const CMD_CONFIG: usize = 103;
+pub const CMD_SETTINGS: usize = 103;
 pub const CMD_QUIT: usize = 104;
 
 pub struct Tray {
@@ -61,7 +61,7 @@ impl Tray {
                 MF_STRING | MF_UNCHECKED
             };
             let _ = AppendMenuW(menu, autostart_flags, CMD_AUTOSTART, w!("Mulai saat login"));
-            let _ = AppendMenuW(menu, MF_STRING, CMD_CONFIG, w!("Buka config"));
+            let _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Pengaturan…"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Keluar"));
 
@@ -88,10 +88,8 @@ impl Tray {
                     let cur = crate::win::autostart::is_enabled();
                     let _ = crate::win::autostart::set_enabled(!cur);
                 }
-                CMD_CONFIG => {
-                    let _ = std::process::Command::new("notepad.exe")
-                        .arg(crate::conf::config_path())
-                        .spawn();
+                CMD_SETTINGS => {
+                    let _ = PostMessageW(Some(self.hwnd), crate::bus::WM_APP_SETTINGS, WPARAM(0), LPARAM(0));
                 }
                 CMD_QUIT => {
                     PostQuitMessage(0);

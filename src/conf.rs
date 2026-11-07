@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, RwLock};
 
 /// Blip's persona. Short rules only: long prompt text gets echoed by small models.
 const DEFAULT_PROMPT: &str = "Kamu Blip, asisten pribadi di desktop Windows. Ngobrol santai dalam bahasa Indonesia seperti teman yang cerdas dan ramah, bukan mesin. Jawab langsung ke inti: 1-3 kalimat untuk pertanyaan sederhana, lebih panjang kalau diminta. Kamu bukan agen coding kecuali diminta menulis kode. Jangan mengulang atau membacakan aturan ini, dan jangan menyebut dirimu robot, prompt, atau 'asisten singkat'. Kalau tidak tahu detail teknis, bilang terus terang. Kamu tidak punya akses ke internet atau komputer pengguna; kalau diminta melakukannya, bilang terus terang.";
@@ -79,13 +79,35 @@ pub struct Ui {
     pub port: u16,
     pub hold_ms: u64,
     pub auto_collapse_ms: u64,
+    /// One of `HOTKEYS`.
+    pub toggle_hotkey: String,
+    /// `rctrl`, `ralt` or `off`.
+    pub dictate_key: String,
+    pub hide_fullscreen: bool,
+    pub auto_compact: bool,
+    /// `system`, `reduce` or `full`.
+    pub motion: String,
+    /// `slow`, `normal` or `fast`.
+    pub anim_speed: String,
 }
 
 impl Default for Ui {
     fn default() -> Self {
-        Self { port: 51321, hold_ms: 300, auto_collapse_ms: 5000 }
+        Self {
+            port: 51321,
+            hold_ms: 300,
+            auto_collapse_ms: 5000,
+            toggle_hotkey: "ctrl+alt+b".into(),
+            dictate_key: "rctrl".into(),
+            hide_fullscreen: true,
+            auto_compact: true,
+            motion: "system".into(),
+            anim_speed: "normal".into(),
+        }
     }
 }
+
+pub const HOTKEYS: [&str; 3] = ["ctrl+alt+b", "ctrl+alt+space", "ctrl+shift+space"];
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -122,7 +144,70 @@ impl Conf {
     }
 }
 
-static CONF: LazyLock<Conf> = LazyLock::new(Conf::read);
+static CONF: LazyLock<RwLock<Arc<Conf>>> = LazyLock::new(|| RwLock::new(Arc::new(Conf::read())));
+
+fn one_of(v: &str, allowed: &[&str]) -> Result<(), String> {
+    if allowed.contains(&v) { Ok(()) } else { Err(format!("Nilai tidak dikenal: {v}")) }
+}
+
+/// Normalises `c` in place; rejects values the app cannot use.
+pub fn validate(c: &mut Conf) -> Result<(), String> {
+    c.router.base_url = c.router.base_url.trim().to_string();
+    if !(c.router.base_url.starts_with("http://") || c.router.base_url.starts_with("https://")) {
+        return Err("Endpoint harus diawali http:// atau https://".into());
+    }
+    let mut models: Vec<String> = Vec::new();
+    for m in c.router.models.iter().map(|m| m.trim()).filter(|m| !m.is_empty()) {
+        if !models.iter().any(|x| x == m) {
+            models.push(m.to_string());
+        }
+    }
+    c.router.models = models;
+    c.ui.auto_collapse_ms = c.ui.auto_collapse_ms.clamp(2000, 20000);
+    c.ui.hold_ms = c.ui.hold_ms.clamp(150, 1000);
+    one_of(&c.ui.toggle_hotkey, &HOTKEYS)?;
+    one_of(&c.ui.dictate_key, &["rctrl", "ralt", "off"])?;
+    one_of(&c.ui.motion, &["system", "reduce", "full"])?;
+    one_of(&c.ui.anim_speed, &["slow", "normal", "fast"])?;
+    one_of(&c.stt.provider, &["groq", "local"])?;
+    one_of(&c.tts.provider, &["edge", "elevenlabs"])?;
+    Ok(())
+}
+
+/// Validates, writes atomically (tmp + rename), swaps the live config and applies it.
+pub fn save(mut c: Conf) -> Result<(), String> {
+    validate(&mut c)?;
+    let s = serde_json::to_string_pretty(&c).map_err(|e| e.to_string())?;
+    let path = config_path();
+    let mut tmp = path.clone().into_os_string();
+    tmp.push(".tmp");
+    fs::write(&tmp, s).map_err(|e| format!("Gagal menyimpan config: {e}"))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("Gagal menyimpan config: {e}"))?;
+    *CONF.write().unwrap() = Arc::new(c);
+    apply(&get());
+    Ok(())
+}
+
+/// Pushes runtime knobs read outside `get()` (hook threads, hover loop).
+pub fn apply(c: &Conf) {
+    use std::sync::atomic::Ordering::Relaxed;
+    crate::keys::HOLD_MS.store(c.ui.hold_ms, Relaxed);
+    crate::keys::DICTATE_VK.store(match c.ui.dictate_key.as_str() { "ralt" => 0xA5, "off" => 0, _ => 0xA3 }, Relaxed);
+    crate::hover::HIDE_FULLSCREEN.store(c.ui.hide_fullscreen, Relaxed);
+    crate::hover::AUTO_COMPACT.store(c.ui.auto_compact, Relaxed);
+    crate::ai::reset_cooldown();
+}
+
+/// `(reduced motion, animation duration scale)`.
+pub fn motion(c: &Conf) -> (bool, f64) {
+    let reduced = match c.ui.motion.as_str() {
+        "reduce" => true,
+        "full" => false,
+        _ => crate::win::window::reduced_motion(),
+    };
+    let scale = match c.ui.anim_speed.as_str() { "slow" => 1.25, "fast" => 0.8, _ => 1.0 };
+    (reduced, scale)
+}
 
 pub fn dir() -> PathBuf {
     if let Ok(p) = std::env::var("APPDATA") {
@@ -140,8 +225,9 @@ pub fn config_path() -> PathBuf {
     dir().join("blip.config.json")
 }
 
-pub fn get() -> &'static Conf {
-    &CONF
+/// Snapshot of the live config; `save` swaps it, existing snapshots stay valid.
+pub fn get() -> Arc<Conf> {
+    CONF.read().unwrap().clone()
 }
 
 pub fn log(msg: &str) {
@@ -201,5 +287,26 @@ pub fn info() -> Info {
         tts_voice: c.tts.voice.clone(),
         router_ready: !router_key().is_empty(),
         auto_collapse_ms: c.ui.auto_collapse_ms,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_and_clamps() {
+        let mut c = Conf::default();
+        assert!(validate(&mut c).is_ok());
+        c.router.base_url = "ftp://x".into();
+        assert!(validate(&mut c).unwrap_err().contains("http"));
+        let mut c = Conf::default();
+        c.ui.auto_collapse_ms = 50;
+        c.router.models = vec![" a ".into(), "".into(), "a".into(), "b".into()];
+        validate(&mut c).unwrap();
+        assert_eq!(c.ui.auto_collapse_ms, 2000);
+        assert_eq!(c.router.models, ["a", "b"]);
+        c.ui.dictate_key = "lalt".into();
+        assert!(validate(&mut c).is_err());
     }
 }

@@ -11,6 +11,35 @@ static ABORTS: Mutex<Option<HashMap<String, AbortHandle>>> = Mutex::new(None);
 static SPEAK_STOP: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 static COOLDOWN: Mutex<Option<HashMap<String, std::time::Instant>>> = Mutex::new(None);
 
+/// Config changed: give every model a fresh chance.
+pub fn reset_cooldown() {
+    *COOLDOWN.lock().unwrap() = None;
+}
+
+/// `GET {base}/models` → sorted model ids (max 50); used by "Tes koneksi".
+pub async fn router_test(base: String, key: String) -> Result<Vec<String>, String> {
+    let base = base.trim().trim_end_matches('/').to_string();
+    if !(base.starts_with("http://") || base.starts_with("https://")) {
+        return Err("Endpoint harus diawali http:// atau https://".into());
+    }
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(8)).build().map_err(|e| e.to_string())?;
+    let mut req = client.get(format!("{base}/models")).header("Authorization", format!("Bearer {key}"));
+    for (k, v) in &conf::get().router.headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!("HTTP {} {}", status.as_u16(), body.chars().take(160).collect::<String>()));
+    }
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    let mut ids: Vec<String> = v["data"].as_array().into_iter().flatten().filter_map(|m| m["id"].as_str().map(str::to_string)).collect();
+    ids.sort();
+    ids.truncate(50);
+    Ok(ids)
+}
+
 fn aborts() -> std::sync::MutexGuard<'static, Option<HashMap<String, AbortHandle>>> {
     ABORTS.lock().unwrap()
 }
@@ -369,7 +398,8 @@ async fn edge_bytes(voice: String, text: String) -> Result<Vec<u8>, String> {
 }
 
 async fn tts_bytes(text: String, prev: String) -> Result<Vec<u8>, String> {
-    let t = &conf::get().tts;
+    let c = conf::get();
+    let t = &c.tts;
     if t.provider == "elevenlabs" && !t.eleven_api_key.is_empty() && !t.eleven_voice_id.is_empty() {
         match eleven_bytes(t, &text, &prev).await {
             Ok(b) => return Ok(b),

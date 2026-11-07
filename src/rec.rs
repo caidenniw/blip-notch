@@ -148,13 +148,13 @@ where
 fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
     let host = cpal::default_host();
     let Some(device) = host.default_input_device() else {
-        finish_error("mic tidak bisa dipakai: tidak ada perangkat input");
+        finish_error(&mode, "mic tidak bisa dipakai: tidak ada perangkat input");
         return;
     };
     let supported = match device.default_input_config() {
         Ok(c) => c,
         Err(e) => {
-            finish_error(&format!("mic tidak bisa dipakai: {e}"));
+            finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
             return;
         }
     };
@@ -168,19 +168,19 @@ fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
         cpal::SampleFormat::I16 => build::<i16>(&device, &cfg, buf.clone(), level.clone()),
         cpal::SampleFormat::U16 => build::<u16>(&device, &cfg, buf.clone(), level.clone()),
         other => {
-            finish_error(&format!("format mic tidak didukung: {other:?}"));
+            finish_error(&mode, &format!("format mic tidak didukung: {other:?}"));
             return;
         }
     };
     let stream = match stream {
         Ok(s) => s,
         Err(e) => {
-            finish_error(&format!("mic tidak bisa dipakai: {e}"));
+            finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
             return;
         }
     };
     if let Err(e) = stream.play() {
-        finish_error(&format!("mic tidak bisa dipakai: {e}"));
+        finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
         return;
     }
 
@@ -209,6 +209,7 @@ fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
 
     let duration = samples.len() as f32 / rate.max(1) as f32;
     if duration < 0.4 || (mode == "chat" && !vad.onset) {
+        if mode == "dictate" { bus::post(Event::Dictate(DictatePhase::Done)); }
         bus::post(Event::SttEmpty);
         return;
     }
@@ -223,21 +224,25 @@ fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
             if mode == "chat" {
                 bus::post(Event::SttResult(text));
             } else {
-                paste(&text);
+                let pasted = paste(&text);
                 bus::post(Event::Dictate(DictatePhase::Done));
+                if !pasted { bus::post(Event::SttError("gagal menempel teks hasil dikte".into())); }
             }
         }
         Ok(_) => {
+            if mode == "dictate" { bus::post(Event::Dictate(DictatePhase::Done)); }
             bus::post(Event::SttEmpty);
         }
         Err(e) => {
+            if mode == "dictate" { bus::post(Event::Dictate(DictatePhase::Done)); }
             bus::post(Event::SttError(e));
         }
     }
 }
 
-fn finish_error(msg: &str) {
+fn finish_error(mode: &str, msg: &str) {
     *REC.lock().unwrap() = None;
+    if mode == "dictate" { bus::post(Event::Dictate(DictatePhase::Done)); }
     conf::log(msg);
     bus::post(Event::SttError(msg.to_string()));
 }
@@ -282,27 +287,28 @@ fn wav_bytes(pcm: &[f32], rate: u32) -> Vec<u8> {
     v
 }
 
-fn paste(text: &str) {
+fn paste(text: &str) -> bool {
     let mut clip = match arboard::Clipboard::new() {
         Ok(c) => c,
         Err(e) => {
             conf::log(&format!("clipboard gagal: {e}"));
-            return;
+            return false;
         }
     };
     let old = clip.get_text().ok();
     if clip.set_text(text.to_string()).is_err() {
         conf::log("clipboard set gagal");
-        return;
+        return false;
     }
-    send_ctrl_v();
+    let sent = send_ctrl_v();
     std::thread::sleep(Duration::from_millis(350));
     if let Some(old) = old {
         let _ = clip.set_text(old);
     }
+    sent == 4
 }
 
-fn send_ctrl_v() {
+fn send_ctrl_v() -> u32 {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
         VK_CONTROL, VK_V,
@@ -325,9 +331,7 @@ fn send_ctrl_v() {
         key(VK_V, true),
         key(VK_CONTROL, true),
     ];
-    unsafe {
-        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-    }
+    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) }
 }
 
 #[cfg(test)]

@@ -24,6 +24,8 @@ raw-window-handle = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 windows-future = "0.3"
 windows-core = "0.62"
+rquickjs = { version = "0.14", features = ["classes", "properties"] }
+taffy = "0.15"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
@@ -44,6 +46,9 @@ windows = { version = "0.62", features = [
   "Win32_Security",
   "Win32_Graphics_Gdi",
   "Win32_Graphics_Direct2D",
+  "Win32_Graphics_DirectComposition",
+  "Win32_Graphics_Dwm",
+  "Win32_UI_Input_Ime",
   "Win32_Graphics_Direct2D_Common",
   "Win32_Graphics_Direct3D",
   "Win32_Graphics_Direct3D11",
@@ -78,3 +83,6 @@ strip = true
 
 [dependencies.windows-numerics]
 version = "0.3"
+
+[dev-dependencies]
+png = "0.17"

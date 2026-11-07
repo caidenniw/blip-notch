@@ -4,7 +4,7 @@
 
 A *dynamic-island* AI assistant for Windows 10/11. Hover the notch and a panel opens with Today, Music, Focus, Tasks, Water, Shelf and Chat pages (dots, arrows, scroll wheel). Press the Copilot key: the island listens, answers with text and voice, then shrinks. When the mouse leaves, the panel closes unless you are typing or the AI is answering.
 
-Built with Tauri 2 (Rust + WebView2), not Electron. MIT licensed. The UI and the default persona are in Indonesian.
+Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out the DOM/CSS, and Direct2D/DirectWrite paint a layered Win32 window. No WebView2 or Electron process. MIT licensed; UI and default persona are Indonesian.
 
 <p align="center">
   <img src="docs/screenshots/music-compact.png" alt="Compact notch while music plays" />
@@ -39,7 +39,7 @@ Built with Tauri 2 (Rust + WebView2), not Electron. MIT licensed. The UI and the
 1. Download `Blip_0.1.0_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
 2. The installer is unsigned: SmartScreen shows a warning. Click "More info" -> "Run anyway".
 3. Run Blip once. It creates `%APPDATA%\Blip\blip.config.json`.
-4. Tray icon -> "Buka config", set `router.apiKey` (see Setup), save, restart Blip.
+4. Open Settings (gear in the notch header or tray -> "Pengaturan…"), paste the API key under AI, then Test connection.
 
 ## Setup
 
@@ -97,10 +97,12 @@ Text chat works without any of this.
 | Mouse leaves | shrinks after 300 ms; stays open if pinned, input has text, dragging, or AI answering |
 | `‹` `›`, dots, wheel | switch pages |
 | Chat | history saved (40 messages, `hapus` clears); chips: summarize / translate clipboard, today (clipboard is read only when a chip is clicked) |
-| `Ctrl+Alt+B` | same as tapping the Copilot key |
+| `Ctrl+Alt+B` (configurable in Settings -> Sistem) | same as tapping the Copilot key |
 | `Ctrl+Alt+Q` | quit |
 
-Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Buka config (open config), Keluar (quit).
+Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Pengaturan… (settings), Keluar (quit).
+
+Settings window (600×540, gear icon in the header): AI endpoint/key/models with a live model test, voice input and output, notch behaviour, page visibility, focus and water targets, autostart, hotkey, dictate key, motion and animation speed. Hotkey choices: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` stays fixed. Changes to `blip.config.json` apply immediately; island prefs (hover, close delay, hidden pages, nudge, focus/water numbers) live in `localstorage.json`.
 
 Local commands (voice or text, no LLM, up to 7 words; Indonesian): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute`, `volume 50`, `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <title> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <text> [@14:30]`.
 
@@ -135,20 +137,24 @@ Claude Code hook example (`~/.claude/settings.json`):
 
 Prerequisites:
 
-- Windows 10/11 with WebView2 (preinstalled on Windows 11)
+- Windows 10/11 (WebView2 is not required)
 - Rust: `winget install Rustlang.Rustup`, then `rustup default stable-x86_64-pc-windows-msvc`
 - Visual Studio 2022 Build Tools with the C++ workload:
   `winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`
-- Node.js 18+ (Tauri CLI only)
+- Node.js and Microsoft Edge only for the reference screenshot harness
 
-```
-npm install
-npm run dev      # development
-npm test         # UI helper tests
-npm run build    # installer: src-tauri\target\release\bundle\nsis\Blip_0.1.0_x64-setup.exe
+```powershell
+cargo run
+cargo test
+cargo build --release    # target\release\blip.exe
+powershell -File tools\ref\run.ps1
 ```
 
-The first build downloads NSIS (needs internet). Rust tests: `cargo test --manifest-path src-tauri/Cargo.toml`.
+The parity harness compares 16 native snapshots with headless Edge at 640×460; each scenario must stay below 1.5% differing pixels. The executable embeds `ui/index.html`, `ui/style.css`, `ui/lib.js`, and `ui/app.js`. These are the original UI sources, not a hand-translated Rust UI.
+
+Browser storage persists in `%APPDATA%\Blip\localstorage.json`, independently of `blip.config.json`. The former native port's `state.json` is left untouched and is not migrated. Known limits: no number-input spinner arrows, thin answer scrollbar, and text selection confined to one bubble.
+
+Animation frames follow the monitor refresh rate (60/120/144 Hz) via `DwmFlush`; when nothing animates, a high-resolution Win32 waitable timer wakes only for JS timers, the caret, and storage flushes, so idle CPU stays near zero. Unchanged CSS cascades are cached between animation frames, and paint-only animations skip layout. Any build can log per-frame update/present durations to `%APPDATA%\Blip\blip.log` with `BLIP_PROFILE_FRAMES=1`; this is diagnostic output, not a frame-rate guarantee.
 
 ## Privacy
 

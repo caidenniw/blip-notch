@@ -7,12 +7,20 @@ use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 pub const WM_APP_EVENT: u32 = WM_APP + 1;
 pub const WM_APP_TOGGLE: u32 = WM_APP + 2;
+/// Open (or focus) the settings window.
+pub const WM_APP_SETTINGS: u32 = WM_APP + 6;
 
 static CH: LazyLock<(Sender<Event>, Mutex<Receiver<Event>>)> = LazyLock::new(|| {
     let (tx, rx) = std::sync::mpsc::channel();
     (tx, Mutex::new(rx))
 });
 static HWND_RAW: AtomicIsize = AtomicIsize::new(0);
+/// Settings window queue; events are dropped while the window is closed.
+static SET_CH: LazyLock<(Sender<Event>, Mutex<Receiver<Event>>)> = LazyLock::new(|| {
+    let (tx, rx) = std::sync::mpsc::channel();
+    (tx, Mutex::new(rx))
+});
+static SET_HWND: AtomicIsize = AtomicIsize::new(0);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DictatePhase {
@@ -75,10 +83,16 @@ pub enum Event {
     UiHide,
     UiAsk(String),
     Agent { agent: String, state: String, text: Option<String> },
-    Lyrics { key: String, result: Result<serde_json::Value, String> },
-    ClipboardText(Result<String, String>),
-    ShelfInfo(Vec<serde_json::Value>),
-    Toast(String),
+    /// Config file saved: island re-reads `info`.
+    Config,
+    /// Settings window asks the island for its prefs.
+    PrefsRequest,
+    /// Island prefs → settings window.
+    Prefs(serde_json::Value),
+    /// Settings window → island: change one pref.
+    PrefSet { key: String, value: serde_json::Value },
+    /// Async `invoke` completion for the JS bridge.
+    Resolve { id: u32, result: Result<serde_json::Value, String> },
 }
 
 pub fn init(hwnd: HWND) {
@@ -104,4 +118,26 @@ pub fn post(e: Event) {
 /// UI thread only: drain everything queued so far.
 pub fn drain() -> Vec<Event> {
     CH.1.lock().unwrap().try_iter().collect()
+}
+
+pub fn init_settings(hwnd: HWND) {
+    SET_HWND.store(hwnd.0 as isize, Ordering::SeqCst);
+}
+
+/// Queue an event for the settings window (dropped when it is closed).
+pub fn post_settings(e: Event) {
+    let h = HWND(SET_HWND.load(Ordering::SeqCst) as *mut _);
+    if h.0.is_null() {
+        return;
+    }
+    if SET_CH.0.send(e).is_ok() {
+        unsafe {
+            let _ = PostMessageW(Some(h), WM_APP_EVENT, WPARAM(0), LPARAM(0));
+        }
+    }
+}
+
+/// UI thread only: drain the settings window queue.
+pub fn drain_settings() -> Vec<Event> {
+    SET_CH.1.lock().unwrap().try_iter().collect()
 }

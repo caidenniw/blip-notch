@@ -1,5 +1,6 @@
 use crate::conf;
 use crate::dropzone;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Mutex;
 use std::time::Duration;
 use crate::bus::{self, post, Event};
@@ -11,8 +12,13 @@ static PREV_FG: Mutex<isize> = Mutex::new(0);
 /// Previous (larger) rect kept briefly after a shrink so a pointer left in the vacated area
 /// does not close the panel.
 static GRACE: Mutex<Option<((f64, f64, f64, f64), std::time::Instant)>> = Mutex::new(None);
+/// Config knobs, set by `conf::apply`.
+pub static HIDE_FULLSCREEN: AtomicBool = AtomicBool::new(true);
+pub static AUTO_COMPACT: AtomicBool = AtomicBool::new(true);
 
-const PAD_IN: f64 = 28.0;
+const PAD_IN: f64 = 16.0;
+/// Poll period; the `iter %` / `dwell` counts below are scaled to it.
+const TICK_MS: u64 = 8;
 const PAD_OUT: f64 = 6.0;
 const WIN_W: f64 = 640.0;
 const WIN_H: f64 = 460.0;
@@ -232,14 +238,25 @@ fn hover_loop() {
     let mut drag_near = false;
     let mut catcher_release: Option<std::time::Instant> = None;
     let mut iter: u64 = 0;
+    let timer = unsafe {
+        use windows::Win32::System::Threading::*;
+        CreateWaitableTimerExW(None, windows::core::PCWSTR::null(), CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS.0).ok()
+    };
     loop {
-        std::thread::sleep(Duration::from_millis(16));
+        match timer {
+            Some(t) => unsafe {
+                use windows::Win32::System::Threading::*;
+                let _ = SetWaitableTimer(t, &-((TICK_MS * 10_000) as i64), 0, None, None, false);
+                WaitForSingleObject(t, INFINITE);
+            },
+            None => std::thread::sleep(Duration::from_millis(TICK_MS)),
+        }
         iter += 1;
 
-        if iter % 60 == 0 {
+        if iter % 120 == 0 {
             #[cfg(windows)]
             {
-                let full = fullscreen_app(hwnd);
+                let full = HIDE_FULLSCREEN.load(Relaxed) && fullscreen_app(hwnd);
                 // Two consecutive hits (~2 s): a single one is the shell re-laying the desktop
                 // during Win+D, which would otherwise flicker the notch away.
                 full_hits = if full {
@@ -305,7 +322,7 @@ fn hover_loop() {
         if hidden {
             continue;
         }
-        if iter % 120 == 0 {
+        if iter % 240 == 0 {
             #[cfg(windows)]
             {
                 assert_topmost(hwnd);
@@ -332,14 +349,14 @@ fn hover_loop() {
         let cx = (cursor.0 - pos.x as f64) / scale;
         let cy = (cursor.1 - pos.y as f64) / scale;
 
-        if iter % 15 == 0 {
+        if iter % 30 == 0 {
             #[cfg(windows)]
             {
                 // Win+D hands the desktop the top z-order slot; take it back.
                 assert_topmost(hwnd);
                 let nl = pos.x + ((WIN_W / 2.0 - STRIP) * scale) as i32;
                 let nr = pos.x + ((WIN_W / 2.0 + STRIP) * scale) as i32;
-                let touch = matches!(foreground_rect(hwnd), Some((r, m))
+                let touch = AUTO_COMPACT.load(Relaxed) && matches!(foreground_rect(hwnd), Some((r, m))
                     if r.top <= m.top + 4
                         && r.bottom > m.top + 100
                         && r.left < nl
@@ -438,7 +455,7 @@ fn hover_loop() {
             // The Blip window is re-asserted topmost every ~2 s, which would push it
             // above the catcher; Explorer would then hit-test the window, which has no
             // drop target, and show a "prohibited" cursor. Keep the catcher on top.
-            dropzone::raise();
+            if dragging || filedrag { dropzone::raise(); }
         }
         if dragging || filedrag {
             // An OLE drag is in flight: keep the catcher up until the drop lands.
@@ -468,7 +485,7 @@ fn hover_loop() {
             // so clicks land in the browser tab underneath.
             let strip = cy <= 3.0 && (cx - WIN_W / 2.0).abs() <= STRIP;
             dwell = if strip { dwell + 1 } else { 0 };
-            dwell >= 16 || filedrag // ~256 ms, or a file drag
+            dwell >= 32 || filedrag // ~256 ms, or a file drag
         } else {
             dwell = 0;
             inside_rect || held_inside || filedrag
