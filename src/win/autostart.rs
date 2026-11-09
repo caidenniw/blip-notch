@@ -30,7 +30,7 @@ pub fn set_enabled(enable: bool) -> Result<(), String> {
     unsafe {
         let mut key = HKEY::default();
         if RegOpenKeyExW(HKEY_CURRENT_USER, RUN_KEY, None, KEY_WRITE, &mut key).is_err() {
-            return Err("gagal buka registry Run".into());
+            return Err("could not open the Run registry key".into());
         }
         let res = if enable {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;

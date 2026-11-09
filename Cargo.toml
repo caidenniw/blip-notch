@@ -1,6 +1,6 @@
 [package]
 name = "blip"
-version = "0.2.0"
+version = "0.3.0"
 description = "Blip - dynamic island AI assistant"
 edition = "2021"
 license = "MIT"

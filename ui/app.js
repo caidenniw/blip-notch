@@ -89,19 +89,14 @@
   const shelfClear = $('#shelfClear');
   const shelfPaste = $('#shelfPaste');
 
+  applyI18n();
+  const tr = t; // `t` is shadowed by todo loop variables
+
   const PLAY_D = 'M8 5v14l11-7z';
   const PAUSE_D = 'M7 5h4v14H7zM13 5h4v14h-4z';
 
   const PAGE_ORDER = ['today', 'music', 'focus', 'todo', 'water', 'shelf', 'chat'];
-  const PAGE_LABEL = {
-    today: 'Hari ini',
-    music: 'Musik',
-    focus: 'Fokus',
-    todo: 'Tugas',
-    water: 'Minum',
-    shelf: 'File',
-    chat: 'Obrolan',
-  };
+  const pageLabel = id => t('page.' + id);
   const PAGE_NAV = {
     today: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
     music: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
@@ -135,8 +130,6 @@
 
   const focusDur = Object.assign({ focus: 25, short: 5, long: 15 }, load('blip.focusDur', {}));
   function phaseSecs(ph) { return Math.round((focusDur[ph] || 25) * 60); }
-  const FOCUS_NAME = { focus: 'Fokus', short: 'Istirahat', long: 'Panjang' };
-  const PHASE_LABEL = { focus: 'Fokus', short: 'Istirahat', long: 'Istirahat panjang' };
 
   const HUD_ICONS = {
     speaker: '<path d="M4 9h3l4-4v14l-4-4H4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
@@ -417,6 +410,9 @@
   let navKey = '';
   function renderPageNav() {
     const vis = visiblePages();
+    document.querySelectorAll('.tdrow[data-go]').forEach(b => {
+      if (pagesOff.includes(b.dataset.go)) b.setAttribute('hidden', ''); else b.removeAttribute('hidden');
+    });
     if (!vis.includes(page)) {
       setPage(vis.includes('chat') ? 'chat' : vis[0]);
       return;
@@ -429,7 +425,7 @@
         if (tab.dataset.p === page) tab.setAttribute('aria-current', 'page');
         else tab.removeAttribute('aria-current');
       }
-      pageTitle.textContent = PAGE_LABEL[page] || '';
+      pageTitle.textContent = pageLabel(page);
       return;
     }
     pageNav.textContent = '';
@@ -438,15 +434,15 @@
       tab.type = 'button';
       tab.dataset.p = id;
       tab.className = 'page-tab' + (id === page ? ' on' : '');
-      tab.title = PAGE_LABEL[id];
-      tab.setAttribute('aria-label', PAGE_LABEL[id]);
+      tab.title = pageLabel(id);
+      tab.setAttribute('aria-label', pageLabel(id));
       if (id === page) tab.setAttribute('aria-current', 'page');
-      tab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + PAGE_NAV[id] + '</svg><span>' + PAGE_LABEL[id] + '</span>';
+      tab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + PAGE_NAV[id] + '</svg><span>' + pageLabel(id) + '</span>';
       tab.addEventListener('click', () => setPage(id));
       pageNav.appendChild(tab);
     }
     navKey = key;
-    pageTitle.textContent = PAGE_LABEL[page] || '';
+    pageTitle.textContent = pageLabel(page);
   }
 
   function setPage(id, dir) {
@@ -542,20 +538,20 @@
 
   function topActivity() {
     if (activities.agent && activities.agent.state === 'waiting') {
-      return { kind: 'agent', title: activities.agent.agent, detail: activities.agent.text || 'menunggu' };
+      return { kind: 'agent', title: activities.agent.agent, detail: activities.agent.text || t('act.waiting') };
     }
     if (activities.timer) {
       const left = Math.max(0, Math.ceil((activities.timer.end - Date.now()) / 1000));
-      return { kind: 'timer', title: 'timer', detail: fmt(left) };
+      return { kind: 'timer', title: t('act.timer'), detail: fmt(left) };
     }
     if (activities.agent && activities.agent.state === 'working') {
-      return { kind: 'agent', title: activities.agent.agent, detail: activities.agent.text || 'bekerja...' };
+      return { kind: 'agent', title: activities.agent.agent, detail: activities.agent.text || t('act.working') };
     }
     if (focus.runningUntil) {
-      return { kind: 'focus', title: focus.phase === 'focus' ? 'Fokus' : 'Istirahat', detail: fmt(focusLeft()) };
+      return { kind: 'focus', title: t(focus.phase === 'focus' ? 'focus.phase.focus' : 'focus.phase.short'), detail: fmt(focusLeft()) };
     }
     if (activities.media && activities.media.playing) {
-      return { kind: 'music', title: activities.media.title || 'musik', detail: activities.media.artist || '' };
+      return { kind: 'music', title: activities.media.title || t('music.untitled'), detail: activities.media.artist || '' };
     }
     return null;
   }
@@ -569,13 +565,13 @@
       if (Date.now() >= activities.timer.end) {
         clearInterval(timerHandle);
         activities.timer = null;
-        alertState('timer selesai', 6000);
+        alertState(t('timer.done'), 6000);
         invoke('beep').catch(() => {});
       } else if (state === 'live' || state === 'idle') {
         updateActivityRow();
       }
     }, 1000);
-    alertState('timer ' + fmt(secs) + ' dipasang', 2000);
+    alertState(t('timer.set', { t: fmt(secs) }), 2000);
   }
 
   function alertState(text, ms, tone) {
@@ -717,30 +713,30 @@
     let call;
     if (it.type === 'media') {
       call = invoke('media_cmd', { cmd: it.cmd });
-      label = INTENT_LABEL[it.cmd];
+      label = t(INTENT_LABEL[it.cmd]);
     } else if (it.type === 'volume') {
       if (it.dir === 'set') {
         call = invoke('volume', { dir: 'set', level: it.level });
-        label = 'volume ' + it.level + '%';
+        label = t('intent.volume', { n: it.level });
       } else {
         call = invoke('volume', { dir: it.dir, steps: it.steps });
-        label = INTENT_LABEL[it.dir];
+        label = t(INTENT_LABEL[it.dir]);
       }
     } else if (it.type === 'open') {
       call = invoke('open_target', { target: it.target });
-      label = 'membuka ' + it.label;
+      label = t('intent.opening', { x: it.label });
     } else if (it.type === 'todo') {
       addTodo(it.text);
-      label = INTENT_LABEL.todo;
+      label = t(INTENT_LABEL.todo);
     } else if (it.type === 'water') {
       drink();
-      label = '+' + water.cup + ' ml dicatat';
+      label = t(INTENT_LABEL.water, { n: water.cup });
     } else if (it.type === 'focus') {
       if (it.cmd === 'start') focusStart(); else focusStop();
-      label = it.cmd === 'start' ? INTENT_LABEL.focusStart : INTENT_LABEL.focusStop;
+      label = t(it.cmd === 'start' ? INTENT_LABEL.focusStart : INTENT_LABEL.focusStop);
     }
     alertState(label || 'ok', 1600, 'ok');
-    if (call) Promise.resolve(call).catch(err => alertState('gagal: ' + err, 3000));
+    if (call) Promise.resolve(call).catch(err => alertState(t('chat.failedMsg', { e: err }), 3000));
   }
 
   function send(text, shown) {
@@ -760,19 +756,19 @@
     const mem = parseMemory(text);
     if (mem) {
       if (mem.type === 'remember') {
-        const t = mem.text.slice(0, 200);
-        const i = memory.findIndex(m => m.toLowerCase() === t.toLowerCase());
+        const mt = mem.text.slice(0, 200);
+        const i = memory.findIndex(m => m.toLowerCase() === mt.toLowerCase());
         if (i >= 0) memory.splice(i, 1);
-        memory.unshift(t);
+        memory.unshift(mt);
         memory.length = Math.min(memory.length, 20);
         saveMemory();
-        localReply(text, 'Oke, aku ingat.', 'diingat');
+        localReply(text, t('mem.ok'), t('mem.okLbl'));
       } else if (mem.type === 'forget') {
         memory.length = 0;
         saveMemory();
-        localReply(text, 'Sudah kulupakan semuanya.', 'dilupakan');
+        localReply(text, t('mem.forgot'), t('mem.forgotLbl'));
       } else {
-        localReply(text, memory.length ? memory.map(m => '- ' + m).join('\n') : 'Belum ada yang kuingat.', 'ingatan');
+        localReply(text, memory.length ? memory.map(m => '- ' + m).join('\n') : t('mem.none'), t('mem.recallLbl'));
       }
       return;
     }
@@ -795,7 +791,7 @@
     answerEl.textContent = '';
     answerEl.classList.remove('err');
     if (!open && !voice) {
-      setTitle('Blip', 'berpikir...');
+      setTitle('Blip', t('chat.thinking'));
       go('thinking');
     }
     const el = addMsg('bot', '');
@@ -845,7 +841,7 @@
     if (pending.el) historyKey = '';
     clearTimeout(chatWatch);
     const text = pending.text.trim();
-    if (pending.el) pending.el.textContent = text || '(kosong)';
+    if (pending.el) pending.el.textContent = text || t('chat.empty');
     history.push({ role: 'assistant', content: text });
     saveChat();
     pending = null;
@@ -880,19 +876,19 @@
     if (el) historyKey = '';
     pending = null;
     answerEl.classList.add('err');
-    answerEl.textContent = 'gagal: ' + p.error;
+    answerEl.textContent = t('chat.failedMsg', { e: p.error });
     if (el) {
       el.classList.add('err');
-      el.textContent = 'gagal: ' + p.error;
+      el.textContent = t('chat.failedMsg', { e: p.error });
     }
-    if (voice) { voiceFail('gagal menjawab'); return; }
+    if (voice) { voiceFail(t('chat.answerFail')); return; }
     flashMood('confused', 1800);
     if (state === 'open') {
-      setTitle('Blip', 'gagal');
+      setTitle('Blip', t('chat.failed'));
       if (!hover) setTimeout(maybeClose, 2500);
       return;
     }
-    setTitle('Blip', 'gagal');
+    setTitle('Blip', t('chat.failed'));
     go('answer');
     scheduleCollapse(7000);
   }
@@ -910,7 +906,7 @@
   listen('tts:start', () => {
     body.classList.add('talking');
     if (voice && voicePhase === 'think') setPhase('speak');
-    if (state === 'answer') setTitle('Blip', 'bicara...');
+    if (state === 'answer') setTitle('Blip', t('chat.speaking'));
   });
   listen('tts:end', () => {
     body.classList.remove('talking');
@@ -927,7 +923,7 @@
 
   // ---------- voice mode ----------
   const PHASE_MOOD = { listen: 'listen', think: 'think', speak: 'speak', wait: 'happy', fail: 'confused' };
-  const PHASE_HINT = { listen: 'ketuk jika selesai', think: 'berpikir', speak: 'ketuk untuk menyela', wait: '', fail: '' };
+  const PHASE_HINT = { listen: 'voice.listenHint', think: 'voice.think', speak: 'voice.speakHint' };
   function setMood(m) { if (m) body.dataset.mood = m; else delete body.dataset.mood; }
   function setLv(v) { lvT = v; }
   const veyes = voiceEl.querySelectorAll('.v-eye');
@@ -991,7 +987,7 @@
   function setPhase(p) {
     voicePhase = p;
     setMood(PHASE_MOOD[p]);
-    vHint.textContent = PHASE_HINT[p] || '';
+    vHint.textContent = PHASE_HINT[p] ? t(PHASE_HINT[p]) : '';
     if (p !== 'speak' && p !== 'listen') setLv(0);
   }
   function flashMood(m, ms) {
@@ -1030,7 +1026,7 @@
     listening = true;
     clearTimeout(listenWatch);
     listenWatch = setTimeout(() => { if (voice && voicePhase === 'listen') invoke('rec_stop').catch(() => {}); }, 32000);
-    invoke('rec_start', { mode: 'chat' }).catch(() => voiceFail('mic gagal'));
+    invoke('rec_start', { mode: 'chat' }).catch(() => voiceFail(t('voice.micFail')));
   }
   function voiceFail(msg) {
     listening = false;
@@ -1099,7 +1095,7 @@
     clearTimeout(listenWatch);
     listening = false;
     if (voice) { voiceEnd(); return; }
-    setTitle('Blip', 'tidak terdengar');
+    setTitle('Blip', t('stt.empty'));
     go('live');
     scheduleCollapse(1500);
   });
@@ -1110,7 +1106,7 @@
     if (voice) { voiceFail(e.payload.error); return; }
     answerEl.classList.add('err');
     answerEl.textContent = e.payload.error;
-    setTitle('Blip', 'stt gagal');
+    setTitle('Blip', t('stt.fail'));
     go('answer');
     scheduleCollapse(4000);
   });
@@ -1119,7 +1115,7 @@
   listen('dictate', e => {
     if (e.payload === 'start') {
       dictating = true;
-      setTitle('Blip', 'dikte...');
+      setTitle('Blip', t('dictate.on'));
       go('listening');
       clearTimeout(dictWatch);
       dictWatch = setTimeout(() => {
@@ -1237,7 +1233,7 @@
 
   function renderMusic() {
     const m = activities.media;
-    mTitle.textContent = m ? m.title || 'musik' : '';
+    mTitle.textContent = m ? m.title || t('music.untitled') : '';
     mArtist.textContent = m ? m.artist || '' : '';
     mApp.textContent = m ? appName(m.app) : '';
     for (const img of [artEl, miniArt]) {
@@ -1388,13 +1384,7 @@
   function syncLyrClass() {
     body.classList.toggle('lyr', lyricsVisible());
     lyrBtn.classList.toggle('loading', lyr.status === 'loading');
-    if (lyr.status === 'loading') lyrNote.textContent = 'mencari lirik…';
-    else if (lyr.status === 'none') lyrNote.textContent = 'lirik tidak ditemukan';
-    else if (lyr.status === 'plain')
-      lyrNote.textContent = 'lirik tanpa waktu (tidak tersinkron)';
-    else if (lyr.status === 'error')
-      lyrNote.textContent = 'lirik gagal dimuat · klik ikon untuk coba lagi';
-    else lyrNote.textContent = '';
+    lyrNote.textContent = ['loading', 'none', 'plain', 'error'].includes(lyr.status) ? t('lyr.' + lyr.status) : '';
     renderLyrShift();
   }
 
@@ -1427,7 +1417,7 @@
       ? res.plain.split(/\r?\n/).filter(Boolean)
       : [];
     if (!lines.length) {
-      lyrStatus.textContent = lyr.status === 'loading' ? 'mencari lirik…' : '';
+      lyrStatus.textContent = lyr.status === 'loading' ? t('lyr.loading') : '';
       return;
     }
     lyrStatus.textContent = '';
@@ -1475,13 +1465,13 @@
     const p = Math.max(0, Math.min(100, (1 - left / total) * 100));
     fRing.style.setProperty('--p', p.toFixed(1));
     fTime.textContent = fmt(left);
-    fPhase.textContent = PHASE_LABEL[focus.phase] || 'Fokus';
-    fCount.textContent = 'sesi ' + Math.min(focus.count + 1, 4) + '/4';
-    fStart.textContent = focus.runningUntil ? 'Jeda' : left < total ? 'Lanjut' : 'Mulai';
+    fPhase.textContent = t('focus.phase.' + focus.phase);
+    fCount.textContent = t('focus.session', { n: Math.min(focus.count + 1, 4) });
+    fStart.textContent = t(focus.runningUntil ? 'focus.pause' : left < total ? 'focus.resume' : 'focus.start');
     if (document.activeElement !== fMin) fMin.value = focusDur[focus.phase];
     $('#fdur').classList.toggle('off', !!focus.runningUntil);
     document.querySelectorAll('.chips button[data-ph]').forEach(b => {
-      b.textContent = FOCUS_NAME[b.dataset.ph] + ' ' + focusDur[b.dataset.ph];
+      b.textContent = t('focus.chip.' + b.dataset.ph) + ' ' + focusDur[b.dataset.ph];
     });
     body.classList.toggle('focusing', !!focus.runningUntil);
     if (focus.runningUntil) liveRing.style.setProperty('--p', p.toFixed(1));
@@ -1547,7 +1537,7 @@
     focus.remaining = phaseSecs(focus.phase);
     saveFocus();
     invoke('beep').catch(() => {});
-    alertState(was === 'focus' ? 'waktunya istirahat' : 'waktunya fokus', 5000, 'ok');
+    alertState(t(was === 'focus' ? 'focus.timeBreak' : 'focus.timeFocus'), 5000, 'ok');
     renderFocus();
   }
 
@@ -1614,14 +1604,14 @@
     const d = new Date(ms);
     const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     const today = new Date();
-    return d.toDateString() === today.toDateString() ? hm : 'besok ' + hm;
+    return d.toDateString() === today.toDateString() ? hm : t('todo.tomorrow', { t: hm });
   }
 
   function renderTodoCount() {
     const today = dayKey(Date.now());
     const doneToday = todos.filter(t => t.done && t.doneAt && dayKey(t.doneAt) === today).length;
     const left = todos.filter(t => !t.done).length;
-    todoCount.textContent = doneToday + ' selesai hari ini · ' + left + ' tersisa';
+    todoCount.textContent = t('todo.count', { done: doneToday, left });
   }
 
   function renderTodos() {
@@ -1630,7 +1620,7 @@
     if (!todos.length) {
       const e = document.createElement('div');
       e.className = 'empty';
-      e.textContent = 'Catat hal kecil. Tambah jam dengan @14:30 — Blip mengingatkan di notch saat waktunya.';
+      e.textContent = t('todo.empty');
       todoList.appendChild(e);
       return;
     }
@@ -1639,14 +1629,14 @@
       row.className = 'trow' + (t.done ? ' done' : '');
       const chk = document.createElement('button');
       chk.className = 'chk';
-      chk.title = t.done ? 'Tandai belum' : 'Tandai selesai';
+      chk.title = tr(t.done ? 'todo.markOpen' : 'todo.markDone');
       chk.addEventListener('click', () => {
         t.done = !t.done;
         t.doneAt = t.done ? Date.now() : null;
         if (t.done) t.notified = true;
         if (t.done) flashMood('cheer', 1400);
         row.classList.toggle('done', t.done);
-        chk.title = t.done ? 'Tandai belum' : 'Tandai selesai';
+        chk.title = tr(t.done ? 'todo.markOpen' : 'todo.markDone');
         saveTodos();
         renderTodoCount();
       });
@@ -1654,7 +1644,7 @@
       const tx = document.createElement('span');
       tx.className = 'tx';
       tx.textContent = t.text;
-      tx.title = t.text + ' (klik dua kali untuk edit)';
+      tx.title = tr('todo.editHint', { text: t.text });
       tx.addEventListener('dblclick', () => {
         const inp = document.createElement('input');
         inp.className = 'tin';
@@ -1698,7 +1688,7 @@
       const del = document.createElement('button');
       del.className = 'del';
       del.textContent = '×';
-      del.title = 'Hapus';
+      del.title = tr('todo.delete');
       del.addEventListener('click', () => {
         todos = todos.filter(x => x !== t);
         saveTodos();
@@ -1773,7 +1763,7 @@
     renderWater();
     if (before < water.goal && waterTotal() >= water.goal) {
       flashMood('cheer', 1800);
-      alertState('target minum tercapai', 3500, 'ok');
+      alertState(t('water.goalAlert'), 3500, 'ok');
     }
   }
 
@@ -1781,7 +1771,7 @@
     const total = waterTotal();
     wBig.textContent = (total / 1000).toFixed(2) + ' / ' + (water.goal / 1000).toFixed(1) + ' L';
     const pct = water.goal ? Math.min(100, Math.round((total / water.goal) * 100)) : 0;
-    wPct.textContent = pct >= 100 ? 'Target tercapai' : pct + '% hari ini';
+    wPct.textContent = pct >= 100 ? t('water.goalReached') : t('water.pctToday', { n: pct });
     wBar.style.width = pct + '%';
     const buckets = waterBuckets(todayWater(), water.start, water.end);
     const max = Math.max(water.goal / (buckets.length || 1), ...buckets, 1);
@@ -1841,19 +1831,19 @@
       water.lastNudge = now;
       saveWater();
       invoke('beep').catch(() => {});
-      alertState('waktunya minum air', 6000, 'ok');
+      alertState(t('water.remind'), 6000, 'ok');
     }
   }, 60000);
 
   // ---------- today page ----------
   function renderToday() {
     const nt = nextTask(todos);
-    tdGreet.textContent = greeting(new Date().getHours());
-    tdTask.textContent = nt ? nt.text + (nt.dueAt ? ' · ' + dueText(nt.dueAt) : '') : 'semua selesai';
+    tdGreet.textContent = t(greeting(new Date().getHours()));
+    tdTask.textContent = nt ? nt.text + (nt.dueAt ? ' · ' + dueText(nt.dueAt) : '') : t('todo.allDone');
     const total = waterTotal();
     const pct = water.goal ? Math.min(100, Math.round((total / water.goal) * 100)) : 0;
     tdWater.textContent = (total / 1000).toFixed(2) + ' / ' + (water.goal / 1000).toFixed(1) + ' L · ' + pct + '%';
-    tdFocus.textContent = focusToday() + ' sesi hari ini';
+    tdFocus.textContent = t('today.focusSessions', { n: focusToday() });
   }
   document.querySelectorAll('.tdrow').forEach(b => b.addEventListener('click', () => setPage(b.dataset.go)));
 
@@ -1912,7 +1902,7 @@
     nudgeShown[n.id] = now;
     lastNudgeAt = now;
     save('blip.nudges', nudgeShown);
-    alertState(n.text, 6000, n.tone);
+    alertState(t(n.key, Object.assign({}, n.vars, n.vars.greet ? { greet: t(n.vars.greet) } : {})), 6000, n.tone);
     flashMood(n.mood, 2200);
   }
   setTimeout(nudgeTick, 4000);
@@ -1924,7 +1914,7 @@
     clearTimeout(shelfToastTimer);
     shelfCount.textContent = msg;
     shelfToastTimer = setTimeout(() => {
-      shelfCount.textContent = shelf.length ? shelf.length + ' item' : '';
+      shelfCount.textContent = shelf.length ? t('shelf.items', { n: shelf.length }) : '';
     }, 1200);
   }
 
@@ -1946,7 +1936,7 @@
 
   function renderShelf(newPaths) {
     shelfPg.classList.toggle('has', shelf.length > 0);
-    shelfCount.textContent = shelf.length ? shelf.length + ' item' : '';
+    shelfCount.textContent = shelf.length ? t('shelf.items', { n: shelf.length }) : '';
     shelfList.textContent = '';
     for (const it of shelf) {
       const card = document.createElement('div');
@@ -1969,7 +1959,7 @@
           draggingOut = true;
           invoke('shelf_drag_out', { paths: [it.path] }).catch(err => {
             draggingOut = false;
-            toastShelf('gagal: ' + err);
+            toastShelf(t('chat.failedMsg', { e: err }));
           });
         }
       });
@@ -1981,7 +1971,7 @@
         if (e.target.closest('.card-actions, .more, .more-menu')) return;
         invoke('open_path', { path: it.path }).catch(() => {
           card.classList.add('missing');
-          toastShelf('file tidak ditemukan');
+          toastShelf(t('shelf.notFound'));
         });
       });
 
@@ -2000,39 +1990,39 @@
       const acts = document.createElement('div');
       acts.className = 'card-actions';
       const pasteBtn = document.createElement('button');
-      pasteBtn.title = 'Tempel ke app aktif';
+      pasteBtn.title = t('shelf.pasteTo');
       pasteBtn.setAttribute('aria-label', pasteBtn.title);
       pasteBtn.textContent = '↱';
       pasteBtn.addEventListener('click', ev => {
         ev.stopPropagation();
         invoke('shelf_copy', { paths: [it.path] })
           .then(() => invoke('release_focus').catch(() => {}))
-          .then(() => toastShelf('disalin — Ctrl+V untuk tempel'))
-          .catch(() => toastShelf('gagal'));
+          .then(() => toastShelf(t('shelf.copied')))
+          .catch(() => toastShelf(t('chat.failed')));
       });
       const openBtn = document.createElement('button');
-      openBtn.title = 'Buka file';
+      openBtn.title = t('shelf.open');
       openBtn.setAttribute('aria-label', openBtn.title);
       openBtn.textContent = '↗';
       openBtn.addEventListener('click', ev => {
         ev.stopPropagation();
         invoke('open_path', { path: it.path }).catch(() => {
           card.classList.add('missing');
-          toastShelf('file tidak ditemukan');
+          toastShelf(t('shelf.notFound'));
         });
       });
       acts.append(pasteBtn, openBtn);
       const more = document.createElement('button');
       more.className = 'more';
       more.textContent = '⋯';
-      more.title = 'Pilihan file';
+      more.title = t('shelf.more');
       const menu = document.createElement('div');
       menu.className = 'more-menu';
       const reveal = document.createElement('button');
-      reveal.textContent = 'Buka lokasi';
-      reveal.addEventListener('click', ev => { ev.stopPropagation(); invoke('reveal_path', { path: it.path }).catch(() => toastShelf('gagal')); });
+      reveal.textContent = t('shelf.reveal');
+      reveal.addEventListener('click', ev => { ev.stopPropagation(); invoke('reveal_path', { path: it.path }).catch(() => toastShelf(t('chat.failed'))); });
       const remove = document.createElement('button');
-      remove.textContent = 'Hapus dari Shelf';
+      remove.textContent = t('shelf.remove');
       remove.addEventListener('click', ev => { ev.stopPropagation(); shelf = shelf.filter(s => s.path !== it.path); saveShelf(); renderShelf(); });
       menu.append(reveal, remove);
       more.addEventListener('click', ev => { ev.stopPropagation(); menu.classList.toggle('on'); });
@@ -2050,7 +2040,7 @@
   shelfPaste.addEventListener('click', () => {
     invoke('shelf_from_clipboard')
       .then(info => addShelf(info, true))
-      .catch(() => toastShelf('clipboard tidak berisi file'));
+      .catch(() => toastShelf(t('shelf.noClip')));
   });
 
   listen('shelf:drag-end', () => {
@@ -2061,6 +2051,7 @@
   listen('drag-near', e => {
     dragging = !!e.payload;
     if (dragging && !draggingOut) {
+      if (pagesOff.includes('shelf')) return; // Files page off: ignore file drags
       // Dragging a file must land on the File page, whatever page was open.
       if (state !== 'open' || page !== 'shelf') openNotch('shelf');
       body.classList.add('dropping');
@@ -2070,7 +2061,7 @@
   });
 
   listen('tauri://drag-enter', () => {
-    if (draggingOut) return;
+    if (draggingOut || pagesOff.includes('shelf')) return;
     if (state !== 'open' || page !== 'shelf') openNotch('shelf');
     body.classList.add('dropping');
   });
@@ -2081,22 +2072,22 @@
 
   listen('tauri://drag-drop', e => {
     body.classList.remove('dropping');
-    if (draggingOut) return;
+    if (draggingOut || pagesOff.includes('shelf')) return;
     const paths = (e.payload && e.payload.paths) || [];
     if (!paths.length) return;
     invoke('shelf_info', { paths })
       .then(info => addShelf(info, true))
-      .catch(err => alertState('gagal: ' + err, 3000));
+      .catch(err => alertState(t('chat.failedMsg', { e: err }), 3000));
   });
 
   // Native OLE catcher: the only drop path that actually receives Explorer files.
   listen('shelf:drop', e => {
     body.classList.remove('dropping');
     const paths = e.payload || [];
-    if (!paths.length || draggingOut) return;
+    if (!paths.length || draggingOut || pagesOff.includes('shelf')) return;
     invoke('shelf_info', { paths })
       .then(info => addShelf(info, true))
-      .catch(err => toastShelf('gagal: ' + err));
+      .catch(err => toastShelf(t('chat.failedMsg', { e: err })));
   });
 
   // ---------- system HUD ----------
@@ -2149,51 +2140,51 @@
     let nobar = false;
     if (p.kind === 'volume') {
       icon = p.muted ? 'muted' : 'speaker';
-      label = p.muted ? 'Bisu' : 'Volume';
+      label = t(p.muted ? 'hud.mute' : 'hud.volume');
       val = (p.value == null ? 0 : p.value) + '%';
       bar = p.value;
     } else if (p.kind === 'caps') {
       icon = 'caps';
-      label = p.on ? 'Caps Lock nyala' : 'Caps Lock mati';
+      label = t(p.on ? 'hud.capsOn' : 'hud.capsOff');
       val = p.on ? 'ON' : 'OFF';
       nobar = true;
     } else if (p.kind === 'power') {
       icon = p.battery != null ? 'battery' : 'power';
       label = p.plugged
-        ? 'Mengisi daya'
+        ? t('hud.charging')
         : p.battery != null && p.battery <= 20
-        ? 'Baterai lemah'
-        : 'Charger dicabut';
+        ? t('hud.battLow')
+        : t('hud.unplugged');
       val = p.battery != null ? p.battery + '%' : '';
       bar = p.battery;
       nobar = p.battery == null;
       if (p.plugged) icon = 'power';
     } else if (p.kind === 'lang') {
       icon = 'keyboard';
-      label = 'Bahasa keyboard';
+      label = t('hud.kbd');
       val = String(p.value || '').toUpperCase();
       nobar = true;
     } else if (p.kind === 'net') {
       icon = 'wifi';
-      label = p.online ? 'Internet tersambung' : 'Internet terputus';
+      label = t(p.online ? 'hud.netOn' : 'hud.netOff');
       val = '';
       nobar = true;
     } else if (p.kind === 'audio') {
       icon = /headphone|headset|buds|airpods|earbud/i.test(p.name || '')
         ? 'headphone'
         : 'speaker';
-      label = p.name || 'Perangkat audio';
+      label = p.name || t('hud.audio');
       val = 'Output';
       nobar = true;
     } else if (p.kind === 'brightness') {
       icon = 'sun';
-      label = 'Kecerahan';
+      label = t('hud.bright');
       val = p.value + '%';
       bar = p.value;
     } else if (p.kind === 'bt') {
       icon = /headphone|headset|buds|airpods|earbud/i.test(p.name || '') ? 'headphone' : 'bt';
       label = p.name || 'Bluetooth';
-      val = p.on ? 'Terhubung' : 'Terputus';
+      val = t(p.on ? 'hud.btOn' : 'hud.btOff');
       nobar = true;
     }
     hudIcon.innerHTML = HUD_ICONS[icon] || '';
@@ -2221,7 +2212,7 @@
     battEl.style.display = 'inline';
     battEl.textContent = battery + '%';
     battEl.classList.toggle('plug', !!plugged);
-    battEl.title = plugged ? 'mengisi daya' : 'baterai';
+    battEl.title = t(plugged ? 'batt.charging' : 'batt.battery');
   }
 
   listen('sys', e => setBatt(e.payload.battery, e.payload.plugged));
@@ -2231,10 +2222,10 @@
     const a = e.payload;
     if (a.state === 'done') {
       activities.agent = null;
-      alertState((a.agent || 'agent') + ' selesai', 5000);
+      alertState(t('agent.done', { a: a.agent || 'agent' }), 5000);
     } else if (a.state === 'waiting') {
       activities.agent = a;
-      alertState((a.agent || 'agent') + ': ' + (a.text || 'menunggu'), 6000);
+      alertState((a.agent || 'agent') + ': ' + (a.text || t('act.waiting')), 6000);
     } else {
       activities.agent = a;
       applyActivityLabel();
@@ -2298,7 +2289,7 @@
     ) {
       invoke('shelf_from_clipboard')
         .then(info => addShelf(info, true))
-        .catch(() => toastShelf('clipboard tidak berisi file'));
+        .catch(() => toastShelf(t('shelf.noClip')));
     }
   });
 
@@ -2321,7 +2312,7 @@
 
   ttsBtn.addEventListener('click', () => {
     ttsOn = !ttsOn;
-    ttsBtn.textContent = 'suara: ' + (ttsOn ? 'on' : 'off');
+    ttsBtn.textContent = t(ttsOn ? 'chat.voiceOn' : 'chat.voiceOff');
   });
 
   // ---------- chat extras: local replies, quick chips ----------
@@ -2346,19 +2337,19 @@
   }
 
   const CLIP_Q = {
-    sum: ['Ringkas teks ini dalam 3 poin singkat:\n\n', 'Ringkas clipboard'],
-    tr: ['Terjemahkan ke bahasa Indonesia (atau ke Inggris jika sudah Indonesia):\n\n', 'Terjemah clipboard'],
+    sum: ['Ringkas teks ini dalam 3 poin singkat:\n\n', 'chat.lblSum'],
+    tr: ['Terjemahkan ke bahasa Indonesia (atau ke Inggris jika sudah Indonesia):\n\n', 'chat.lblTr'],
   };
   $('.qchips').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-q]');
     if (!b || pending) return;
     const q = b.dataset.q;
     if (q === 'day') {
-      send('Ini kondisi hariku: ' + todaySummary() + ' Beri ringkasan 2 kalimat dan satu saran.', 'Ringkas hariku');
+      send('Ini kondisi hariku: ' + todaySummary() + ' Beri ringkasan 2 kalimat dan satu saran.', t('chat.lblDay'));
       return;
     }
     const [prefix, label] = CLIP_Q[q];
-    invoke('clipboard_text').then(t => send(prefix + t, label)).catch(e => alertState('gagal: ' + e, 3000));
+    invoke('clipboard_text').then(x => send(prefix + x, t(label))).catch(e => alertState(t('chat.failedMsg', { e }), 3000));
   });
 
   $('#chatClear').addEventListener('click', () => {
@@ -2377,11 +2368,7 @@
     clockEl.textContent = hm;
     tdTime.textContent = hm;
     icTime.textContent = hm;
-    icDate.textContent = d.toLocaleDateString('id-ID', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
+    icDate.textContent = fmtDate(d);
   }
   tickClock();
   setInterval(tickClock, 15000);
@@ -2447,11 +2434,30 @@
   renderToday();
   armSleep();
 
+  function applyLang(l) {
+    setLang(l);
+    applyI18n();
+    navKey = '';
+    historyKey = '';
+    renderPageNav();
+    renderToday();
+    renderFocus();
+    renderTodos();
+    renderWater();
+    renderShelf();
+    renderMusic();
+    tickClock();
+    applyActivityLabel();
+    ttsBtn.textContent = t(ttsOn ? 'chat.voiceOn' : 'chat.voiceOff');
+    if (state === 'open') applySize();
+  }
+
   function applyInfo(i) {
+    if (i.language && i.language !== lang()) applyLang(i.language);
     chatFooterEl.title = i.model + ' | stt: ' + i.stt;
     ttsOn = !!i.tts;
     ttsEnabled = !!i.tts;
-    ttsBtn.textContent = 'suara: ' + (ttsOn ? 'on' : 'off');
+    ttsBtn.textContent = t(ttsOn ? 'chat.voiceOn' : 'chat.voiceOff');
     autoCollapseMs = i.autoCollapseMs || 5000;
     applySize();
   }

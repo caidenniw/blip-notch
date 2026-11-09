@@ -148,13 +148,13 @@ where
 fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
     let host = cpal::default_host();
     let Some(device) = host.default_input_device() else {
-        finish_error(&mode, "mic tidak bisa dipakai: tidak ada perangkat input");
+        finish_error(&mode, "microphone unavailable: no input device");
         return;
     };
     let supported = match device.default_input_config() {
         Ok(c) => c,
         Err(e) => {
-            finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
+            finish_error(&mode, &format!("microphone unavailable: {e}"));
             return;
         }
     };
@@ -168,19 +168,19 @@ fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
         cpal::SampleFormat::I16 => build::<i16>(&device, &cfg, buf.clone(), level.clone()),
         cpal::SampleFormat::U16 => build::<u16>(&device, &cfg, buf.clone(), level.clone()),
         other => {
-            finish_error(&mode, &format!("format mic tidak didukung: {other:?}"));
+            finish_error(&mode, &format!("unsupported microphone format: {other:?}"));
             return;
         }
     };
     let stream = match stream {
         Ok(s) => s,
         Err(e) => {
-            finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
+            finish_error(&mode, &format!("microphone unavailable: {e}"));
             return;
         }
     };
     if let Err(e) = stream.play() {
-        finish_error(&mode, &format!("mic tidak bisa dipakai: {e}"));
+        finish_error(&mode, &format!("microphone unavailable: {e}"));
         return;
     }
 
@@ -226,7 +226,7 @@ fn capture(mode: String, stop_flag: Arc<AtomicBool>) {
             } else {
                 let pasted = paste(&text);
                 bus::post(Event::Dictate(DictatePhase::Done));
-                if !pasted { bus::post(Event::SttError("gagal menempel teks hasil dikte".into())); }
+                if !pasted { bus::post(Event::SttError("could not paste dictated text".into())); }
             }
         }
         Ok(_) => {

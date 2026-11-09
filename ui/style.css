@@ -712,3 +712,4 @@ body[data-mood="listen"] .v-eye { background: #8ce4ff; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.tdrow[hidden] { display: none; }

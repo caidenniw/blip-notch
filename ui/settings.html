@@ -1,87 +1,93 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Pengaturan Blip</title>
+  <title>Blip Settings</title>
   <link rel="stylesheet" href="settings.css">
 </head>
-<body data-sec="ai">
+<body data-sec="general">
   <div class="app">
     <aside class="side">
-      <div class="brand"><div class="eyes"><i class="eye"></i><i class="eye"></i></div><b>Blip</b><span>Pengaturan</span></div>
+      <div class="brand"><div class="eyes"><i class="eye"></i><i class="eye"></i></div><b>Blip</b><span data-i18n="set.title">Settings</span></div>
       <nav id="nav">
-        <button class="navb" data-s="ai">AI</button>
-        <button class="navb" data-s="suara">Suara</button>
-        <button class="navb" data-s="notch">Notch</button>
-        <button class="navb" data-s="halaman">Halaman</button>
-        <button class="navb" data-s="fokus">Fokus &amp; Air</button>
-        <button class="navb" data-s="sistem">Sistem</button>
+        <button class="navb" data-s="general" data-i18n="set.nav.general">General</button>
+        <button class="navb" data-s="ai" data-i18n="set.nav.ai">AI</button>
+        <button class="navb" data-s="voice" data-i18n="set.nav.voice">Voice</button>
+        <button class="navb" data-s="notch" data-i18n="set.nav.notch">Notch</button>
+        <button class="navb" data-s="pages" data-i18n="set.nav.pages">Pages</button>
+        <button class="navb" data-s="focus" data-i18n="set.nav.focus">Focus &amp; Water</button>
       </nav>
       <span id="status"></span>
     </aside>
 
     <main class="content scroll">
-      <section class="sec" data-s="ai">
-        <h2>AI</h2>
-        <div class="item"><div class="txt"><b>Endpoint</b><span class="hint">API kompatibel OpenAI</span></div><input class="tx" data-k="c.router.baseUrl" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>API key</b><span class="hint">Disimpan di blip.config.json</span></div><input class="tx" type="password" data-k="c.router.apiKey" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>Model</b><span class="hint">Urutan cadangan, pisah koma</span></div><input class="tx" data-k="c.router.models" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>Tes koneksi</b><span class="hint">Ambil daftar model dari endpoint</span></div><button class="pill" id="test">Tes koneksi</button></div>
-        <div id="models" class="chips"></div>
+      <section class="sec" data-s="general">
+        <h2 data-i18n="set.nav.general">General</h2>
+        <div class="item"><div class="txt"><b data-i18n="set.lang">Language</b><span class="hint" data-i18n="set.langHint">App interface language</span></div><div class="seg" data-k="c.ui.language"><button data-v="en">English</button><button data-v="id">Bahasa Indonesia</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.autostart">Start at login</b><span class="hint" data-i18n="set.autostartHint">Run Blip automatically</span></div><button class="sw" data-k="autostart"><i></i></button></div>
+        <div class="item wide"><div class="txt"><b data-i18n="set.hotkey">Open/close hotkey</b><span class="hint" data-i18n="set.hotkeyHint">Ctrl+Alt+Q always quits</span></div><div class="seg" data-k="c.ui.toggleHotkey"><button data-v="ctrl+alt+b">Ctrl+Alt+B</button><button data-v="ctrl+alt+space">Ctrl+Alt+Space</button><button data-v="ctrl+shift+space">Ctrl+Shift+Space</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.dictate">Dictation key (hold)</b><span class="hint" data-i18n="set.dictateHint">Hold to speak</span></div><div class="seg" data-k="c.ui.dictateKey"><button data-v="rctrl" data-i18n="set.key.rctrl">Right Ctrl</button><button data-v="ralt" data-i18n="set.key.ralt">Right Alt</button><button data-v="off" data-i18n="set.off">Off</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.cfg">Config file</b><span class="hint" data-i18n="set.cfgHint">Advanced settings (prompt, headers)</span></div><button class="link" id="cfgFile" data-i18n="set.cfgOpen">Open config file</button></div>
       </section>
 
-      <section class="sec" data-s="suara">
-        <h2>Suara</h2>
-        <div class="item"><div class="txt"><b>Pengenal suara</b><span class="hint">Groq butuh API key, Lokal pakai whisper</span></div><div class="seg" data-k="c.stt.provider"><button data-v="groq">Groq</button><button data-v="local">Lokal</button></div></div>
-        <div class="item"><div class="txt"><b>Groq API key</b><span class="hint">Untuk pengenal suara Groq</span></div><input class="tx" type="password" data-k="c.stt.apiKey" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>Bahasa</b><span class="hint">Kode bahasa, mis. id atau en</span></div><input class="tx" data-k="c.stt.language" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>Suara jawaban</b><span class="hint">Bacakan jawaban AI</span></div><button class="sw" data-k="c.tts.enabled"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Mesin suara</b><span class="hint">ElevenLabs jatuh ke Edge bila gagal</span></div><div class="seg" data-k="c.tts.provider"><button data-v="edge">Edge</button><button data-v="elevenlabs">ElevenLabs</button></div></div>
-        <div class="item"><div class="txt"><b>Suara Edge</b><span class="hint">mis. id-ID-ArdiNeural</span></div><input class="tx" data-k="c.tts.voice" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>ElevenLabs API key</b><span class="hint">Opsional</span></div><input class="tx" type="password" data-k="c.tts.elevenApiKey" spellcheck="false"></div>
-        <div class="item"><div class="txt"><b>ElevenLabs voice ID</b><span class="hint">Opsional</span></div><input class="tx" data-k="c.tts.elevenVoiceId" spellcheck="false"></div>
+      <section class="sec" data-s="ai">
+        <h2>AI</h2>
+        <div class="item"><div class="txt"><b data-i18n="ai.endpoint">Endpoint</b><span class="hint" data-i18n="ai.endpointHint">OpenAI-compatible API</span></div><input class="tx" id="aiBase" spellcheck="false"></div>
+        <div class="item"><div class="txt"><b data-i18n="ai.key">API key</b><span class="hint" data-i18n="ai.keyHint">Stored in blip.config.json</span></div><div class="keyrow"><input class="tx" id="aiKey" type="password" spellcheck="false"><button class="eye-btn" id="aiEye" title="Show or hide key" data-i18n-title="ai.showKey"><svg viewBox="0 0 24 24"></svg></button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="ai.model">Model ID</b><span class="hint" data-i18n="ai.modelHint">Main model</span></div><input class="tx" id="aiModel" spellcheck="false" placeholder="e.g. gpt-4o-mini" data-i18n-ph="ai.modelPh"></div>
+        <div class="item col">
+          <div class="txt"><b data-i18n="ai.backups">Backup models</b><span class="hint" data-i18n="ai.backupsHint">Used in order when the main model fails</span></div>
+          <div id="bkList"></div>
+          <div class="bkadd"><input class="tx" id="bkNew" spellcheck="false" placeholder="Backup model ID" data-i18n-ph="ai.backupPh"><button class="link" id="bkAdd" data-i18n="ai.add">Add</button></div>
+        </div>
+        <div class="conn" id="conn" data-st="idle"><i class="ic"><svg viewBox="0 0 24 24"></svg></i><div class="cbody"><code class="mid" id="connModel"></code><span class="sub" id="connSub"></span><span class="hint" id="connDetail"></span></div></div>
+        <div class="acts"><button class="pill" id="connect" data-i18n="ai.connect">Connect</button><button class="link" id="discard" data-i18n="ai.discard">Discard changes</button></div>
+      </section>
+
+      <section class="sec" data-s="voice">
+        <h2 data-i18n="set.nav.voice">Voice</h2>
+        <div class="item"><div class="txt"><b data-i18n="set.stt">Speech recognition</b><span class="hint" data-i18n="set.sttHint">Groq needs an API key, Local uses whisper</span></div><div class="seg" data-k="c.stt.provider"><button data-v="groq">Groq</button><button data-v="local" data-i18n="set.local">Local</button></div></div>
+        <div class="item only-groq"><div class="txt"><b data-i18n="set.groqKey">Groq API key</b><span class="hint" data-i18n="set.groqKeyHint">For Groq speech recognition</span></div><input class="tx" type="password" data-k="c.stt.apiKey" spellcheck="false"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.sttLang">Speech language</b><span class="hint" data-i18n="set.sttLangHint">Language code, e.g. id or en</span></div><input class="tx" data-k="c.stt.language" spellcheck="false"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.tts">Read answers aloud</b><span class="hint" data-i18n="set.ttsHint">Speak AI answers</span></div><button class="sw" data-k="c.tts.enabled"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.engine">Voice engine</b><span class="hint" data-i18n="set.engineHint">ElevenLabs falls back to Edge on failure</span></div><div class="seg" data-k="c.tts.provider"><button data-v="edge">Edge</button><button data-v="elevenlabs">ElevenLabs</button></div></div>
+        <div class="item only-edge"><div class="txt"><b data-i18n="set.edgeVoice">Edge voice</b><span class="hint" data-i18n="set.edgeVoiceHint">e.g. id-ID-ArdiNeural</span></div><input class="tx" data-k="c.tts.voice" spellcheck="false"></div>
+        <div class="item only-eleven"><div class="txt"><b>ElevenLabs API key</b><span class="hint" data-i18n="set.optional">Optional</span></div><input class="tx" type="password" data-k="c.tts.elevenApiKey" spellcheck="false"></div>
+        <div class="item only-eleven"><div class="txt"><b>ElevenLabs voice ID</b><span class="hint" data-i18n="set.optional">Optional</span></div><input class="tx" data-k="c.tts.elevenVoiceId" spellcheck="false"></div>
       </section>
 
       <section class="sec" data-s="notch">
         <h2>Notch</h2>
-        <div class="item"><div class="txt"><b>Buka saat hover</b><span class="hint">Mati: klik notch untuk membuka</span></div><button class="sw" data-k="p.hoverOpen"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Jeda sebelum tutup</b><span class="hint">Setelah kursor keluar</span></div><div class="seg" data-k="p.closeDelay"><button data-v="150">Cepat</button><button data-v="300">Normal</button><button data-v="600">Santai</button></div></div>
-        <div class="item"><div class="txt"><b>Tutup jawaban otomatis</b><span class="hint">Lama jawaban tampil</span></div><div class="seg" data-k="c.ui.autoCollapseMs"><button data-v="3000">3 dtk</button><button data-v="5000">5 dtk</button><button data-v="8000">8 dtk</button></div></div>
-        <div class="item"><div class="txt"><b>Sembunyi saat app layar penuh</b><span class="hint">Game, video, presentasi</span></div><button class="sw" data-k="c.ui.hideFullscreen"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Ringkas saat jendela menempel atas</b><span class="hint">Notch mengecil agar tab browser bisa diklik</span></div><button class="sw" data-k="c.ui.autoCompact"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Pengingat (nudge)</b><span class="hint">Baterai, minum, fokus</span></div><button class="sw" data-k="p.nudgeOn"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.hover">Open on hover</b><span class="hint" data-i18n="set.hoverHint">Off: click the notch to open</span></div><button class="sw" data-k="p.hoverOpen"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.closeDelay">Delay before closing</b><span class="hint" data-i18n="set.closeDelayHint">After the cursor leaves</span></div><div class="seg" data-k="p.closeDelay"><button data-v="150" data-i18n="set.fast">Fast</button><button data-v="300" data-i18n="set.normal">Normal</button><button data-v="600" data-i18n="set.relaxed">Relaxed</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.autoHide">Auto-hide answer</b><span class="hint" data-i18n="set.autoHideHint">How long answers stay</span></div><div class="seg" data-k="c.ui.autoCollapseMs"><button data-v="3000" data-i18n="set.s3">3 s</button><button data-v="5000" data-i18n="set.s5">5 s</button><button data-v="8000" data-i18n="set.s8">8 s</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.fullscreen">Hide for fullscreen apps</b><span class="hint" data-i18n="set.fullscreenHint">Games, video, presentations</span></div><button class="sw" data-k="c.ui.hideFullscreen"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.compact">Compact when a window touches the top</b><span class="hint" data-i18n="set.compactHint">Notch shrinks so browser tabs stay clickable</span></div><button class="sw" data-k="c.ui.autoCompact"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.nudge">Reminders</b><span class="hint" data-i18n="set.nudgeHint">Battery, water, focus</span></div><button class="sw" data-k="p.nudgeOn"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="set.motion">Motion</b><span class="hint" data-i18n="set.motionHint">Open/close animation</span></div><div class="seg" data-k="c.ui.motion"><button data-v="system" data-i18n="set.motionSystem">Follow Windows</button><button data-v="reduce" data-i18n="set.motionReduce">Reduce</button><button data-v="full" data-i18n="set.motionFull">Full</button></div></div>
+        <div class="item"><div class="txt"><b data-i18n="set.speed">Animation speed</b><span class="hint" data-i18n="set.speedHint">Duration of all transitions</span></div><div class="seg" data-k="c.ui.animSpeed"><button data-v="slow" data-i18n="set.slow">Slow</button><button data-v="normal" data-i18n="set.normal">Normal</button><button data-v="fast" data-i18n="set.fast">Fast</button></div></div>
       </section>
 
-      <section class="sec" data-s="halaman">
-        <h2>Halaman</h2>
-        <div class="item"><div class="txt"><b>Hari ini</b><span class="hint">Jam, tugas, minum, fokus</span></div><button class="sw" data-k="p.page.today"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Musik</b><span class="hint">Tampil saat ada media</span></div><button class="sw" data-k="p.page.music"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Fokus</b><span class="hint">Pomodoro</span></div><button class="sw" data-k="p.page.focus"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Tugas</b><span class="hint">Daftar tugas</span></div><button class="sw" data-k="p.page.todo"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Minum</b><span class="hint">Pencatat air</span></div><button class="sw" data-k="p.page.water"><i></i></button></div>
-        <div class="item"><div class="txt"><b>File</b><span class="hint">Rak file sementara</span></div><button class="sw" data-k="p.page.shelf"><i></i></button></div>
-        <div class="item"><div class="txt"><b>Obrolan</b><span class="hint">selalu tampil</span></div><button class="sw on" data-lock="1"><i></i></button></div>
+      <section class="sec" data-s="pages">
+        <h2 data-i18n="set.nav.pages">Pages</h2>
+        <div class="item"><div class="txt"><b data-i18n="page.today">Today</b><span class="hint" data-i18n="set.pg.todayHint">Clock, tasks, water, focus</span></div><button class="sw" data-k="p.page.today"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.music">Music</b><span class="hint" data-i18n="set.pg.musicHint">Shown only while media is playing</span></div><button class="sw" data-k="p.page.music"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.focus">Focus</b><span class="hint" data-i18n="set.pg.focusHint">Pomodoro</span></div><button class="sw" data-k="p.page.focus"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.todo">Tasks</b><span class="hint" data-i18n="set.pg.todoHint">Task list</span></div><button class="sw" data-k="p.page.todo"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.water">Water</b><span class="hint" data-i18n="set.pg.waterHint">Water tracker</span></div><button class="sw" data-k="p.page.water"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.shelf">Files</b><span class="hint" data-i18n="set.pg.shelfHint">Off: dragging files onto the notch is ignored</span></div><button class="sw" data-k="p.page.shelf"><i></i></button></div>
+        <div class="item"><div class="txt"><b data-i18n="page.chat">Chat</b><span class="hint" data-i18n="set.pg.chatHint">always shown</span></div><button class="sw on" data-lock="1"><i></i></button></div>
       </section>
 
-      <section class="sec" data-s="fokus">
-        <h2>Fokus &amp; Air</h2>
-        <div class="item"><div class="txt"><b>Fokus</b><span class="hint">Menit</span></div><input class="num" type="number" data-k="p.focusDur.focus"></div>
-        <div class="item"><div class="txt"><b>Istirahat</b><span class="hint">Menit</span></div><input class="num" type="number" data-k="p.focusDur.short"></div>
-        <div class="item"><div class="txt"><b>Istirahat panjang</b><span class="hint">Menit</span></div><input class="num" type="number" data-k="p.focusDur.long"></div>
-        <div class="item"><div class="txt"><b>Target minum (ml)</b><span class="hint">500–6000</span></div><input class="num" type="number" data-k="p.water.goal"></div>
-        <div class="item"><div class="txt"><b>Ukuran gelas (ml)</b><span class="hint">50–1000</span></div><input class="num" type="number" data-k="p.water.cup"></div>
-        <div class="item"><div class="txt"><b>Ingatkan tiap (menit)</b><span class="hint">15–240</span></div><input class="num" type="number" data-k="p.water.every"></div>
-        <div class="item"><div class="txt"><b>Jam mulai / selesai</b><span class="hint">Pengingat hanya di rentang ini</span></div><div class="pair"><input class="num" type="number" data-k="p.water.start"><input class="num" type="number" data-k="p.water.end"></div></div>
-      </section>
-
-      <section class="sec" data-s="sistem">
-        <h2>Sistem</h2>
-        <div class="item"><div class="txt"><b>Mulai saat login</b><span class="hint">Jalankan Blip otomatis</span></div><button class="sw" data-k="autostart"><i></i></button></div>
-        <div class="item wide"><div class="txt"><b>Hotkey buka/tutup</b><span class="hint">Ctrl+Alt+Q tetap untuk keluar</span></div><div class="seg" data-k="c.ui.toggleHotkey"><button data-v="ctrl+alt+b">Ctrl+Alt+B</button><button data-v="ctrl+alt+space">Ctrl+Alt+Space</button><button data-v="ctrl+shift+space">Ctrl+Shift+Space</button></div></div>
-        <div class="item"><div class="txt"><b>Tombol dikte (tahan)</b><span class="hint">Tahan untuk bicara</span></div><div class="seg" data-k="c.ui.dictateKey"><button data-v="rctrl">Ctrl Kanan</button><button data-v="ralt">Alt Kanan</button><button data-v="off">Mati</button></div></div>
-        <div class="item"><div class="txt"><b>Gerakan</b><span class="hint">Animasi buka/tutup</span></div><div class="seg" data-k="c.ui.motion"><button data-v="system">Ikuti Windows</button><button data-v="reduce">Kurangi</button><button data-v="full">Penuh</button></div></div>
-        <div class="item"><div class="txt"><b>Kecepatan animasi</b><span class="hint">Durasi semua transisi</span></div><div class="seg" data-k="c.ui.animSpeed"><button data-v="slow">Lambat</button><button data-v="normal">Normal</button><button data-v="fast">Cepat</button></div></div>
-        <div class="item"><div class="txt"><b>File config</b><span class="hint">Pengaturan lanjutan (prompt, header)</span></div><button class="link" id="cfgFile">Buka file config</button></div>
+      <section class="sec" data-s="focus">
+        <h2 data-i18n="set.nav.focus">Focus &amp; Water</h2>
+        <div class="item"><div class="txt"><b data-i18n="focus.phase.focus">Focus</b><span class="hint" data-i18n="set.minutes">Minutes</span></div><input class="num" type="number" data-k="p.focusDur.focus"></div>
+        <div class="item"><div class="txt"><b data-i18n="focus.phase.short">Break</b><span class="hint" data-i18n="set.minutes">Minutes</span></div><input class="num" type="number" data-k="p.focusDur.short"></div>
+        <div class="item"><div class="txt"><b data-i18n="focus.phase.long">Long break</b><span class="hint" data-i18n="set.minutes">Minutes</span></div><input class="num" type="number" data-k="p.focusDur.long"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.waterGoal">Water goal (ml)</b><span class="hint">500–6000</span></div><input class="num" type="number" data-k="p.water.goal"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.cup">Cup size (ml)</b><span class="hint">50–1000</span></div><input class="num" type="number" data-k="p.water.cup"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.every">Remind every (minutes)</b><span class="hint">15–240</span></div><input class="num" type="number" data-k="p.water.every"></div>
+        <div class="item"><div class="txt"><b data-i18n="set.hours">Start / end hour</b><span class="hint" data-i18n="set.hoursHint">Reminders only within this range</span></div><div class="pair"><input class="num" type="number" data-k="p.water.start"><input class="num" type="number" data-k="p.water.end"></div></div>
       </section>
     </main>
   </div>

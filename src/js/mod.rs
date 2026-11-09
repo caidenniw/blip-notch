@@ -306,7 +306,8 @@ impl Js {
 
     /// `document`-targeted event.
     pub fn fire_doc(&self, ty: &str, init: &serde_json::Value) -> bool {
-        self.fire(0, ty, init)
+        let j = serde_json::to_string(&serde_json::json!([-3, ty, init])).unwrap();
+        self.call("__fire", &j)
     }
 }
 

@@ -2,7 +2,7 @@ Unicode true
 RequestExecutionLevel user
 
 !ifndef VERSION
-  !define VERSION "0.2.0"
+  !define VERSION "0.3.0"
 !endif
 
 Name "Blip"
@@ -18,7 +18,7 @@ InstallDirRegKey HKCU "Software\Blip" "InstallDir"
 !define MUI_UNICON "..\assets\icon.ico"
 
 !define MUI_FINISHPAGE_RUN "$INSTDIR\blip.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Jalankan Blip"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Blip"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -28,11 +28,11 @@ InstallDirRegKey HKCU "Software\Blip" "InstallDir"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-!insertmacro MUI_LANGUAGE "Indonesian"
 !insertmacro MUI_LANGUAGE "English"
+!insertmacro MUI_LANGUAGE "Indonesian"
 
 Section "Install"
-  DetailPrint "Menutup Blip jika sedang berjalan..."
+  DetailPrint "Closing Blip if running..."
   nsExec::Exec 'taskkill /F /IM blip.exe'
 
   SetOutPath "$INSTDIR"
@@ -53,7 +53,7 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-  DetailPrint "Menutup Blip..."
+  DetailPrint "Closing Blip..."
   nsExec::Exec 'taskkill /F /IM blip.exe'
 
   Delete "$SMPROGRAMS\Blip.lnk"

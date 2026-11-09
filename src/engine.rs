@@ -27,13 +27,13 @@ impl Doc {
     pub const ISLAND: Doc = Doc {
         html: include_str!("../ui/index.html"),
         css: include_str!("../ui/style.css"),
-        scripts: &[("lib.js", include_str!("../ui/lib.js")), ("app.js", include_str!("../ui/app.js"))],
+        scripts: &[("i18n.js", include_str!("../ui/i18n.js")), ("lib.js", include_str!("../ui/lib.js")), ("app.js", include_str!("../ui/app.js"))],
         view: (crate::win::window::WIN_W as f32, crate::win::window::WIN_H as f32),
     };
     pub const SETTINGS: Doc = Doc {
         html: include_str!("../ui/settings.html"),
         css: include_str!("../ui/settings.css"),
-        scripts: &[("settings.js", include_str!("../ui/settings.js"))],
+        scripts: &[("i18n.js", include_str!("../ui/i18n.js")), ("settings.js", include_str!("../ui/settings.js"))],
         view: (crate::win::window::SET_W as f32, crate::win::window::SET_H as f32),
     };
 }

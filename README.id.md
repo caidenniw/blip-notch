@@ -26,10 +26,10 @@ Host native Rust: QuickJS menjalankan JavaScript UI asli, taffy menghitung layou
 
 ## Instal
 
-1. Unduh `Blip_0.1.0_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
+1. Unduh `Blip_0.3.0_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
 2. Installer belum ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 3. Jalankan Blip sekali. Aplikasi membuat `%APPDATA%\Blip\blip.config.json`.
-4. Buka Pengaturan (ikon gear di header notch atau tray -> "Pengaturan…"), tempel API key di bagian AI, lalu Tes koneksi.
+4. Buka Pengaturan (ikon gear di header notch atau tray), isi endpoint, API key dan model di bagian AI, lalu Hubungkan. Konfigurasi disimpan hanya setelah model utama berhasil menjawab.
 
 ## Setup
 
@@ -102,12 +102,14 @@ Obrolan teks jalan tanpa bagian ini.
 | Hover (default) | buka halaman Hari ini bila panel terakhir dibuka > 30 mnt lalu |
 | HUD | volume, Caps Lock, charger/baterai, bahasa keyboard, status internet, perangkat audio |
 | Full-screen | notch otomatis bersembunyi saat aplikasi atau game layar penuh berjalan |
-| `Ctrl+Alt+B` (bisa diganti di Pengaturan -> Sistem) | sama dengan tap tombol Copilot |
+| `Ctrl+Alt+B` (bisa diganti di Pengaturan → Umum) | sama dengan tap tombol Copilot |
 | `Ctrl+Alt+Q` | keluar |
 
 Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
 
 Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
+
+Versi 0.3.0 menambahkan pergantian bahasa Inggris/Indonesia langsung, pemeriksaan model AI utama dan cadangan, serta menu Umum, AI, Suara, Notch, Halaman, Fokus & Air. Sakelar halaman langsung berlaku termasuk baris Hari ini. Klik native yang sebelumnya memanggil handler dua kali dan membatalkan perubahan sakelar sudah diperbaiki.
 
 Perintah lokal (suara atau teks, tanpa LLM, maks 7 kata): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute` (`banget` = 20%), `volume 50` (0-100), `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <judul> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <teks> [@14:30]`.
 

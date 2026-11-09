@@ -99,7 +99,7 @@ unsafe fn open_settings() {
             return;
         }
     };
-    let engine = Engine::boot(&engine::Doc::SETTINGS, js::storage::Storage::memory(), 0.0, false, &[]);
+    let engine = Engine::boot(&engine::Doc::SETTINGS, js::storage::Storage::memory(), 0.0, false, &[("lang", lang_js())]);
     let (r, s) = conf::motion(&conf::get());
     engine.set_motion(r, s);
     SETTINGS.with(|s| {
@@ -267,6 +267,11 @@ fn key_name(vk: u16, lp: LPARAM) -> Option<String> {
     })
 }
 
+/// `globalThis.__LANG` for the UI documents; evaluated before their scripts.
+fn lang_js() -> String {
+    format!("globalThis.__LANG = {};", serde_json::to_string(&conf::get().ui.language).unwrap())
+}
+
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         WM_MOUSEACTIVATE if hwnd == bus::hwnd() => LRESULT(MA_NOACTIVATE as isize),
@@ -278,6 +283,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             LRESULT(0)
         }
         WM_ERASEBKGND if hwnd != bus::hwnd() => LRESULT(1),
+        WM_ACTIVATE if hwnd != bus::hwnd() && (wp.0 & 0xffff) != 0 => {
+            bus::post(bus::Event::PrefsRequest);
+            DefWindowProcW(hwnd, msg, wp, lp)
+        }
         bus::WM_APP_SETTINGS => {
             open_settings();
             LRESULT(0)
@@ -361,9 +370,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             let state = with_win(hwnd, |a| a.input.context_target(&a.engine, x, y).then(|| a.input.context_state(&a.engine))).flatten();
             if let Some(state) = state {
                 if let Ok(menu) = CreatePopupMenu() {
-                    for (i, label) in [windows::core::w!("Potong"), windows::core::w!("Salin"), windows::core::w!("Tempel"), windows::core::w!("Pilih semua")].into_iter().enumerate() {
+                    let labels = if conf::english() { ["Cut", "Copy", "Paste", "Select all"] } else { ["Potong", "Salin", "Tempel", "Pilih semua"] };
+                    for (i, label) in labels.into_iter().enumerate() {
+                        let label = windows::core::HSTRING::from(label);
                         let flags = if state[i] { MF_STRING } else { MF_STRING | MF_GRAYED };
-                        let _ = AppendMenuW(menu, flags, i + 1, label);
+                        let _ = AppendMenuW(menu, flags, i + 1, &label);
                     }
                     let mut pt = POINT::default();
                     let _ = GetCursorPos(&mut pt);
@@ -534,7 +545,7 @@ fn main() {
         let (_, _, pw, ph) = win::window::top_centre(k as f64);
         let gfx = Gfx::new(pw as u32, ph as u32).expect("gfx");
         let storage = js::storage::Storage::load(conf::dir().join("localstorage.json"));
-        let engine = Engine::boot(&engine::Doc::ISLAND, storage, 0.0, false, &[]);
+        let engine = Engine::boot(&engine::Doc::ISLAND, storage, 0.0, false, &[("lang", lang_js())]);
         let (r, s) = conf::motion(&conf::get());
         engine.set_motion(r, s);
         APP.with(|a| {

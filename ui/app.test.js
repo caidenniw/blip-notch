@@ -135,7 +135,7 @@ strictEqual(parseMemory('ingat apa kemarin?'), null);
 deepStrictEqual(parseMemory('lupakan semua'), { type: 'forget' });
 deepStrictEqual(parseMemory('apa yang kamu ingat?'), { type: 'recall' });
 
-deepStrictEqual([5, 12, 16, 20].map(greeting), ['Selamat pagi', 'Selamat siang', 'Selamat sore', 'Selamat malam']);
+deepStrictEqual([5, 12, 16, 20].map(greeting), ['greet.morning', 'greet.noon', 'greet.afternoon', 'greet.evening']);
 
 const T = [{ text: 'x', done: false }, { text: 'late', done: false, dueAt: 200 }, { text: 'soon', done: false, dueAt: 100 }];
 strictEqual(nextTask(T).text, 'soon');
@@ -150,6 +150,17 @@ strictEqual(pickNudge({ ...base, plugged: true }).id, 'greet');
 strictEqual(pickNudge({ ...base, battery: null, hour: 23 }).id, 'night');
 strictEqual(pickNudge({ ...base, battery: null, hour: 17, shown: { greet: N - 1000 } }).id, 'evening');
 strictEqual(pickNudge({ ...base, battery: null, hour: 3, shown: { night: N - 1000 } }), null);
+strictEqual(pickNudge(base).key, 'nudge.battery');
+deepStrictEqual(pickNudge({ ...base, plugged: true }).vars, { greet: 'greet.noon', n: 2 });
+
+// English commands
+strictEqual(parseTimer('timer 5 minutes'), 300);
+deepStrictEqual(parseIntent('add task buy milk'), { type: 'todo', text: 'buy milk' });
+strictEqual(parseIntent('start focus').cmd, 'start');
+strictEqual(parseIntent('play lofi on youtube').type, 'open');
+strictEqual(parseIntent('volume louder').dir, 'up');
+strictEqual(parseMemory('remember that I like tea').type, 'remember');
+if (parseTodo('call mom at 14', N).dueAt == null) throw new Error('parseTodo at');
 
 
 console.log('ok');

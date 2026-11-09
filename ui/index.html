@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Blip</title>
@@ -38,10 +38,10 @@
       <div class="open layer">
         <div class="hdr">
           <div class="eyes mini" id="miniEyes"><i class="eye"></i><i class="eye"></i></div>
-          <span id="pageTitle">Obrolan</span>
+          <span id="pageTitle">Chat</span>
           <span class="grow"></span>
-          <button class="nav" id="setBtn" title="Pengaturan" aria-label="Pengaturan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-          <button class="nav" id="pinBtn" title="Sematkan" aria-label="Sematkan"><svg viewBox="0 0 24 24"><path d="M16 12V4H8v8l-2 2v2h5v6l1 1 1-1v-6h5v-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+          <button class="nav" id="setBtn" title="Settings" aria-label="Settings" data-i18n-title="hdr.settings" data-i18n-aria="hdr.settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          <button class="nav" id="pinBtn" title="Pin" aria-label="Pin" data-i18n-title="hdr.pin" data-i18n-aria="hdr.pin"><svg viewBox="0 0 24 24"><path d="M16 12V4H8v8l-2 2v2h5v6l1 1 1-1v-6h5v-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
           <span id="batt"></span>
           <span id="clock">--:--</span>
         </div>
@@ -50,9 +50,9 @@
           <section class="pg today-pg" data-p="today">
             <div class="tleft"><b id="tdTime">--:--</b><span id="tdGreet"></span></div>
             <div class="tright">
-              <button class="tdrow" data-go="todo"><span class="k">Tugas</span><span id="tdTask"></span></button>
-              <button class="tdrow" data-go="water"><span class="k">Minum</span><span id="tdWater"></span></button>
-              <button class="tdrow" data-go="focus"><span class="k">Fokus</span><span id="tdFocus"></span></button>
+              <button class="tdrow" data-go="todo"><span class="k" data-i18n="page.todo">Tasks</span><span id="tdTask"></span></button>
+              <button class="tdrow" data-go="water"><span class="k" data-i18n="page.water">Water</span><span id="tdWater"></span></button>
+              <button class="tdrow" data-go="focus"><span class="k" data-i18n="page.focus">Focus</span><span id="tdFocus"></span></button>
             </div>
           </section>
 
@@ -68,15 +68,15 @@
               </div>
               <div class="mbar">
                 <span class="t" id="mPos">0:00</span>
-                <div class="prog" id="prog" title="Geser posisi"><i id="progFill"></i></div>
+                <div class="prog" id="prog" title="Seek" data-i18n-title="music.seek"><i id="progFill"></i></div>
                 <span class="t" id="mLeft">-0:00</span>
               </div>
               <div class="ctl" id="media">
-                <button id="lyrBtn" title="Lirik" aria-label="Lirik"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 12h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-                <button data-cmd="prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24"><path d="M11 6 3 12l8 6zM21 6l-8 6 8 6z"/></svg></button>
-                <button data-cmd="toggle" aria-label="Putar/Jeda"><svg viewBox="0 0 24 24"><path id="playIcon" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
-                <button data-cmd="next" aria-label="Berikutnya"><svg viewBox="0 0 24 24"><path d="m13 6 8 6-8 6zM3 6l8 6-8 6z"/></svg></button>
-                <span class="lyr-sync" id="lyrSync"><button id="lyrMinus" title="Lirik lebih lambat" aria-label="Lirik lebih lambat">−</button><output id="lyrOff" title="Klik dua kali untuk reset">0.0s</output><button id="lyrPlus" title="Lirik lebih awal" aria-label="Lirik lebih awal">+</button></span>
+                <button id="lyrBtn" title="Lyrics" aria-label="Lyrics" data-i18n-title="music.lyrics" data-i18n-aria="music.lyrics"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 12h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+                <button data-cmd="prev" aria-label="Previous" data-i18n-aria="music.prev"><svg viewBox="0 0 24 24"><path d="M11 6 3 12l8 6zM21 6l-8 6 8 6z"/></svg></button>
+                <button data-cmd="toggle" aria-label="Play/Pause" data-i18n-aria="music.toggle"><svg viewBox="0 0 24 24"><path id="playIcon" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
+                <button data-cmd="next" aria-label="Next" data-i18n-aria="music.next"><svg viewBox="0 0 24 24"><path d="m13 6 8 6-8 6zM3 6l8 6-8 6z"/></svg></button>
+                <span class="lyr-sync" id="lyrSync"><button id="lyrMinus" title="Lyrics later" aria-label="Lyrics later" data-i18n-title="music.lyrSlower" data-i18n-aria="music.lyrSlower">−</button><output id="lyrOff" title="Double-click to reset" data-i18n-title="music.lyrReset">0.0s</output><button id="lyrPlus" title="Lyrics earlier" aria-label="Lyrics earlier" data-i18n-title="music.lyrFaster" data-i18n-aria="music.lyrFaster">+</button></span>
               </div>
             </div>
             <div class="lyr-wrap">
@@ -88,18 +88,18 @@
           <section class="pg focus-pg" data-p="focus">
             <div class="pring" id="fRing"><div class="pin"><span id="fTime">25:00</span></div></div>
             <div class="fmeta">
-              <div class="fhead"><b id="fPhase">Fokus</b><span id="fCount">sesi 1/4</span></div>
+              <div class="fhead"><b id="fPhase">Focus</b><span id="fCount">session 1/4</span></div>
               <div class="chips">
-                <button data-ph="focus">Fokus 25</button>
-                <button data-ph="short">Istirahat 5</button>
-                <button data-ph="long">Panjang 15</button>
+                <button data-ph="focus">Focus 25</button>
+                <button data-ph="short">Break 5</button>
+                <button data-ph="long">Long 15</button>
               </div>
               <div class="frow">
-                <div class="fdur" id="fdur"><button id="fMinus" aria-label="Kurangi 5 menit">−</button><input id="fMin" type="number" min="1" max="120" step="1" aria-label="Menit"/><span>mnt</span><button id="fPlus" aria-label="Tambah 5 menit">+</button></div>
+                <div class="fdur" id="fdur"><button id="fMinus" aria-label="Minus 5 minutes" data-i18n-aria="focus.minus">−</button><input id="fMin" type="number" min="1" max="120" step="1" aria-label="Minutes" data-i18n-aria="focus.minutes"/><span data-i18n="focus.min">min</span><button id="fPlus" aria-label="Plus 5 minutes" data-i18n-aria="focus.plus">+</button></div>
                 <div class="fbtns">
-                  <button class="pill" id="fStart">Mulai</button>
-                  <button class="pill ghost" id="fReset">Reset</button>
-                  <button class="pill ghost" id="fSkip">Lewati</button>
+                  <button class="pill" id="fStart">Start</button>
+                  <button class="pill ghost" id="fReset" data-i18n="focus.reset">Reset</button>
+                  <button class="pill ghost" id="fSkip" data-i18n="focus.skip">Skip</button>
                 </div>
               </div>
             </div>
@@ -107,10 +107,10 @@
 
           <section class="pg todo-pg" data-p="todo">
             <div class="phead">
-              <span id="todoCount">0/0 selesai</span>
-              <button class="link" id="todoClear">Hapus selesai</button>
+              <span id="todoCount"></span>
+              <button class="link" id="todoClear" data-i18n="todo.clear">Clear done</button>
             </div>
-            <div class="tadd"><input class="tin" id="todoIn" placeholder="Tugas baru… (@14:30)" /><button class="pill" id="todoAdd">Tambah</button></div>
+            <div class="tadd"><input class="tin" id="todoIn" placeholder="New task… (@14:30)" data-i18n-ph="todo.placeholder" /><button class="pill" id="todoAdd" data-i18n="todo.add">Add</button></div>
             <div class="tlist scroll" id="todoList"></div>
           </section>
 
@@ -119,28 +119,28 @@
               <div class="wbig"><b id="wBig">0.00 / 2.0 L</b><span id="wPct">0%</span></div>
               <div class="wbtns">
                 <button class="pill" id="wDrink">+250 ml</button>
-                <button class="pill ghost" id="wUndo">Batal</button>
-                <button class="icn" id="wSet" title="Pengaturan" aria-label="Pengaturan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+                <button class="pill ghost" id="wUndo" data-i18n="water.undo">Undo</button>
+                <button class="icn" id="wSet" title="Settings" aria-label="Settings" data-i18n-title="hdr.settings" data-i18n-aria="hdr.settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </div>
             </div>
             <div class="wbar"><i id="wBar"></i></div>
             <div class="wchart" id="wChart"></div>
             <div class="wform" id="wForm">
-              <label>target <input id="wGoal" type="number" min="500" max="6000" step="100" /></label>
-              <label>gelas <input id="wCup" type="number" min="50" max="1000" step="50" /></label>
-              <label>tiap <input id="wEvery" type="number" min="15" max="240" step="5" /> mnt</label>
+              <label><span data-i18n="water.goalLbl">goal</span> <input id="wGoal" type="number" min="500" max="6000" step="100" /></label>
+              <label><span data-i18n="water.cupLbl">cup</span> <input id="wCup" type="number" min="50" max="1000" step="50" /></label>
+              <label><span data-i18n="water.everyLbl">every</span> <input id="wEvery" type="number" min="15" max="240" step="5" /> <span data-i18n="focus.min">min</span></label>
             </div>
           </section>
 
           <section class="pg shelf-pg" data-p="shelf">
             <div class="phead">
               <span id="shelfCount"></span>
-              <button class="link" id="shelfPaste">Tempel</button>
-              <button class="link" id="shelfClear">Bersihkan</button>
+              <button class="link" id="shelfPaste" data-i18n="shelf.paste">Paste</button>
+              <button class="link" id="shelfClear" data-i18n="shelf.clear">Clear</button>
             </div>
             <div class="zone" id="shelfEmpty">
-              <b>Tarik file ke sini</b>
-              <span>Tempel file dari clipboard, atau tarik ke sini</span>
+              <b data-i18n="shelf.dropTitle">Drag files here</b>
+              <span data-i18n="shelf.dropHint">Paste files from the clipboard, or drag them here</span>
             </div>
             <div class="slist scroll" id="shelfList"></div>
           </section>
@@ -148,19 +148,19 @@
           <section class="pg chat-pg" data-p="chat">
             <div class="messages scroll" id="messages"></div>
             <div class="composer">
-              <textarea id="input" rows="1" placeholder="Tulis atau tekan Ctrl Kanan…"></textarea>
-              <button class="icon" id="mic" title="Bicara" aria-label="Bicara"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-              <button class="icon primary" id="send" title="Kirim" aria-label="Kirim"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+              <textarea id="input" rows="1" placeholder="Type or hold Right Ctrl…" data-i18n-ph="chat.placeholder"></textarea>
+              <button class="icon" id="mic" title="Speak" aria-label="Speak" data-i18n-title="chat.speak" data-i18n-aria="chat.speak"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+              <button class="icon primary" id="send" title="Send" aria-label="Send" data-i18n-title="chat.send" data-i18n-aria="chat.send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
             </div>
             <div class="footer">
-              <span class="qchips"><button class="link" data-q="sum">ringkas clipboard</button><button class="link" data-q="tr">terjemah clipboard</button><button class="link" data-q="day">hari ini</button></span>
-              <button class="link" id="chatClear">hapus</button>
-              <button class="link" id="ttsToggle">suara: on</button>
+              <span class="qchips"><button class="link" data-q="sum" data-i18n="chat.qSum">summarize clipboard</button><button class="link" data-q="tr" data-i18n="chat.qTr">translate clipboard</button><button class="link" data-q="day" data-i18n="chat.qDay">today</button></span>
+              <button class="link" id="chatClear" data-i18n="chat.clear">clear</button>
+              <button class="link" id="ttsToggle">voice: on</button>
             </div>
           </section>
         </div>
 
-        <nav class="page-nav" id="pageNav" aria-label="Halaman Blip"></nav>
+        <nav class="page-nav" id="pageNav" aria-label="Blip pages" data-i18n-aria="page.nav"></nav>
       </div>
 
       <div class="voice layer" id="voice">
@@ -171,6 +171,7 @@
       <div class="answer layer" id="answer"></div>
     </div>
   </div>
+  <script src="i18n.js"></script>
   <script src="lib.js"></script>
   <script src="app.js"></script>
 </body>

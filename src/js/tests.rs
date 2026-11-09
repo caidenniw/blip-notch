@@ -36,7 +36,12 @@ fn lib_js_tests() {
 }
 
 fn boot(scenario: &str) -> crate::engine::Engine {
+    boot_with("", scenario)
+}
+
+fn boot_with(pre: &str, scenario: &str) -> crate::engine::Engine {
     let extra = vec![
+        ("lang", pre.to_string()),
         ("fixed.js", include_str!("../../tools/ref/fixed.js").to_string()),
         ("mock.js", include_str!("../../tools/ref/mock.js").to_string()),
         ("scenario", scenario.to_string()),
@@ -52,6 +57,19 @@ fn run(e: &crate::engine::Engine, until: f64) {
     }
 }
 
+#[test]
+fn settings_page_toggle_commits_once() {
+    let e = boot_settings(r#"
+setTimeout(() => __emit('prefs', { pagesOff: [] }), 100);
+setTimeout(() => __click('.navb[data-s="pages"]'), 150);
+setTimeout(() => __click('.sw[data-k="p.page.todo"]'), 200);
+setTimeout(() => document.body.setAttribute('data-probe', JSON.stringify(__lastInvoke.pref_set)), 300);
+"#);
+    run(&e, 400.0);
+    let value: serde_json::Value = serde_json::from_str(&probe(&e)).unwrap();
+    assert_eq!(value, serde_json::json!({"key": "pagesOff", "value": ["todo"]}));
+}
+
 /// app.js boots against the native DOM, renders its page nav and the idle clock.
 #[test]
 fn app_boots_idle() {
@@ -61,7 +79,7 @@ fn app_boots_idle() {
     let d = &p.dom;
     let ic = d.by_id("icTime").unwrap();
     assert_eq!(d.text_content(ic), "09:41");
-    assert_eq!(d.text_content(d.by_id("icDate").unwrap()), "Sab, 24 Okt");
+    assert_eq!(d.text_content(d.by_id("icDate").unwrap()), "Sat, 24 Oct");
     // music page hidden without media: 6 tabs
     assert_eq!(d.element_children(d.by_id("pageNav").unwrap()).len(), 6);
     assert_eq!(d.attr(d.body, "data-state"), Some("idle"));
@@ -81,7 +99,7 @@ fn hover_opens_today() {
     let island = d.by_id("island").unwrap();
     let g = p.layout.boxes[&(island, crate::layout::Part::Main)];
     assert_eq!((g.w, g.h), (460.0, 150.0));
-    assert!(d.text_content(d.by_id("tdGreet").unwrap()).starts_with("Selamat"));
+    assert!(d.text_content(d.by_id("tdGreet").unwrap()).starts_with("Good"));
 }
 
 /// Chat bubbles stream: the MutationObserver + rAF path resizes the panel.
@@ -168,25 +186,116 @@ fn idle_is_quiet() {
     assert!(!e.animating());
 }
 
-/// Settings window: nav switches section, a choice commits through `config_set`.
-#[test]
-fn settings_page_commits_choice() {
-    const SRC: &str = r#"
-setTimeout(() => __click('.navb[data-s="sistem"]'), 300);
-setTimeout(() => __click('.seg[data-k="c.ui.animSpeed"] button[data-v="fast"]'), 400);
-setTimeout(() => document.body.setAttribute('data-probe', __lastInvoke.config_set ? __lastInvoke.config_set.conf.ui.animSpeed : 'none'), 600);
-"#;
+fn boot_settings(scenario: &str) -> crate::engine::Engine {
     let extra = vec![
         ("fixed.js", include_str!("../../tools/ref/fixed.js").to_string()),
         ("mock.js", include_str!("../../tools/ref/mock.js").to_string()),
-        ("scenario", SRC.to_string()),
+        ("scenario", scenario.to_string()),
     ];
-    let e = crate::engine::Engine::boot(&crate::engine::Doc::SETTINGS, crate::js::storage::Storage::memory(), 0.0, true, &extra);
-    run(&e, 800.0);
+    crate::engine::Engine::boot(&crate::engine::Doc::SETTINGS, crate::js::storage::Storage::memory(), 0.0, true, &extra)
+}
+
+fn probe(e: &crate::engine::Engine) -> String {
     let p = e.page.borrow();
-    assert_eq!(p.dom.attr(p.dom.body, "data-probe"), Some("fast"));
-    assert_eq!(p.dom.attr(p.dom.body, "data-sec"), Some("sistem"));
+    p.dom.attr(p.dom.body, "data-probe").unwrap_or("").to_string()
+}
+
+/// Settings window: nav switches section, a choice commits through `config_set`.
+#[test]
+fn settings_page_commits_choice() {
+    let e = boot_settings(r#"
+setTimeout(() => __click('.navb[data-s="notch"]'), 300);
+setTimeout(() => __click('.seg[data-k="c.ui.animSpeed"] button[data-v="fast"]'), 400);
+setTimeout(() => document.body.setAttribute('data-probe', __lastInvoke.config_set ? __lastInvoke.config_set.conf.ui.animSpeed : 'none'), 600);
+"#);
+    run(&e, 800.0);
+    assert_eq!(probe(&e), "fast");
+    let p = e.page.borrow();
+    assert_eq!(p.dom.attr(p.dom.body, "data-sec"), Some("notch"));
     let sec = |s: &str| p.dom.query_str(p.dom.html, &format!("section.sec[data-s=\"{s}\"]"), false)[0];
-    assert!(p.layout.boxes.get(&(sec("sistem"), crate::layout::Part::Main)).is_some_and(|b| b.w > 0.0));
+    assert!(p.layout.boxes.get(&(sec("notch"), crate::layout::Part::Main)).is_some_and(|b| b.w > 0.0));
     assert!(!p.layout.boxes.contains_key(&(sec("ai"), crate::layout::Part::Main)));
+}
+
+fn ai_connect_scenario(model: &str) -> String {
+    format!(r#"
+setTimeout(() => __click('.navb[data-s="ai"]'), 300);
+setTimeout(() => {{ const m = document.querySelector('#aiModel'); m.value = '{model}'; m.dispatchEvent(new Event('input')); document.querySelector('#bkNew').value = 'bad-model'; }}, 350);
+setTimeout(() => __click('#bkAdd'), 400);
+setTimeout(() => __click('#connect'), 450);
+setTimeout(() => document.body.setAttribute('data-probe', (__lastInvoke.config_set ? __lastInvoke.config_set.conf.router.models.join(',') : 'none') + '|' + document.querySelector('#conn').dataset.st + '|' + document.querySelector('.bk .dot').className), 900);
+"#)
+}
+
+#[test]
+fn settings_ai_connect_saves_on_success() {
+    let e = boot_settings(&ai_connect_scenario("gpt-x"));
+    run(&e, 1000.0);
+    assert_eq!(probe(&e), "gpt-x,bad-model|ok|dot bad");
+}
+
+#[test]
+fn settings_ai_connect_fail_keeps_config() {
+    let e = boot_settings(&ai_connect_scenario("bad-primary"));
+    run(&e, 1000.0);
+    assert!(probe(&e).starts_with("none|fail"), "{}", probe(&e));
+}
+
+/// Hidden pages drop their tab and Today row; Files off ignores dropped files.
+#[test]
+fn island_hidden_page_rows() {
+    let e = boot("__seedStorage({'blip.page':'today','blip.pageAt':Date.now()});
+        setTimeout(() => __emit('pref-set', {key:'pagesOff', value:['todo','shelf']}), 100);
+        setTimeout(() => __emit('hover', true), 200);
+        setTimeout(() => __emit('shelf:drop', ['C:/x.txt']), 1600);");
+    run(&e, 1500.0);
+    {
+        let p = e.page.borrow();
+        let d = &p.dom;
+        assert_eq!(d.element_children(d.by_id("pageNav").unwrap()).len(), 4);
+        let row = d.query_str(d.html, ".tdrow[data-go=\"todo\"]", false)[0];
+        assert!(d.attr(row, "hidden").is_some());
+    }
+    run(&e, 2000.0);
+    let p = e.page.borrow();
+    let shelf = p.storage.get("blip.shelf").unwrap_or_default();
+    assert!(shelf.is_empty() || shelf == "[]", "{shelf}");
+}
+
+/// Every key used by the UI exists, and `en`/`id` carry the same key set.
+#[test]
+fn i18n_keys_complete() {
+    let rt = Runtime::new().unwrap();
+    let ctx = Context::full(&rt).unwrap();
+    let missing: String = ctx.with(|ctx| {
+        ctx.globals().set("__lang_srcs", vec![
+            include_str!("../../ui/index.html"), include_str!("../../ui/settings.html"), include_str!("../../ui/app.js"),
+            include_str!("../../ui/settings.js"), include_str!("../../ui/lib.js"),
+        ]).unwrap();
+        ctx.eval::<(), _>(include_str!("../../ui/i18n.js")).catch(&ctx).unwrap();
+        ctx.eval::<String, _>(
+            r#"(() => {
+              const en = Object.keys(STR.en).sort(), id = Object.keys(STR.id).sort();
+              if (JSON.stringify(en) !== JSON.stringify(id)) return 'key sets differ: ' + en.filter(k => !id.includes(k)).concat(id.filter(k => !en.includes(k))).join(',');
+              const used = new Set();
+              for (const src of __lang_srcs) {
+                for (const m of src.matchAll(/data-i18n(?:-title|-aria|-ph)?="([^"]+)"/g)) used.add(m[1]);
+                for (const m of src.matchAll(/\b(?:t|tr)\('([^']+)'/g)) if (!m[1].endsWith('.')) used.add(m[1]);
+                for (const m of src.matchAll(/'((?:intent|greet|nudge)\.[a-zA-Z.]+)'/g)) used.add(m[1]);
+              }
+              return [...used].filter(k => !(k in STR.en)).join(',');
+            })()"#,
+        ).catch(&ctx).unwrap()
+    });
+    assert_eq!(missing, "");
+}
+
+#[test]
+fn island_switches_to_indonesian() {
+    let e = boot_with("globalThis.__LANG='id';", "");
+    run(&e, 500.0);
+    let p = e.page.borrow();
+    let d = &p.dom;
+    assert_eq!(d.text_content(d.by_id("icDate").unwrap()), "Sab, 24 Okt");
+    assert_eq!(d.text_content(d.by_id("pageTitle").unwrap()), "Obrolan");
 }

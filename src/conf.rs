@@ -89,6 +89,8 @@ pub struct Ui {
     pub motion: String,
     /// `slow`, `normal` or `fast`.
     pub anim_speed: String,
+    /// UI language: `en` or `id`.
+    pub language: String,
 }
 
 impl Default for Ui {
@@ -103,6 +105,7 @@ impl Default for Ui {
             auto_compact: true,
             motion: "system".into(),
             anim_speed: "normal".into(),
+            language: "en".into(),
         }
     }
 }
@@ -147,14 +150,14 @@ impl Conf {
 static CONF: LazyLock<RwLock<Arc<Conf>>> = LazyLock::new(|| RwLock::new(Arc::new(Conf::read())));
 
 fn one_of(v: &str, allowed: &[&str]) -> Result<(), String> {
-    if allowed.contains(&v) { Ok(()) } else { Err(format!("Nilai tidak dikenal: {v}")) }
+    if allowed.contains(&v) { Ok(()) } else { Err(format!("Unknown value: {v}")) }
 }
 
 /// Normalises `c` in place; rejects values the app cannot use.
 pub fn validate(c: &mut Conf) -> Result<(), String> {
     c.router.base_url = c.router.base_url.trim().to_string();
     if !(c.router.base_url.starts_with("http://") || c.router.base_url.starts_with("https://")) {
-        return Err("Endpoint harus diawali http:// atau https://".into());
+        return Err("Endpoint must start with http:// or https://".into());
     }
     let mut models: Vec<String> = Vec::new();
     for m in c.router.models.iter().map(|m| m.trim()).filter(|m| !m.is_empty()) {
@@ -169,6 +172,7 @@ pub fn validate(c: &mut Conf) -> Result<(), String> {
     one_of(&c.ui.dictate_key, &["rctrl", "ralt", "off"])?;
     one_of(&c.ui.motion, &["system", "reduce", "full"])?;
     one_of(&c.ui.anim_speed, &["slow", "normal", "fast"])?;
+    one_of(&c.ui.language, &["en", "id"])?;
     one_of(&c.stt.provider, &["groq", "local"])?;
     one_of(&c.tts.provider, &["edge", "elevenlabs"])?;
     Ok(())
@@ -181,8 +185,8 @@ pub fn save(mut c: Conf) -> Result<(), String> {
     let path = config_path();
     let mut tmp = path.clone().into_os_string();
     tmp.push(".tmp");
-    fs::write(&tmp, s).map_err(|e| format!("Gagal menyimpan config: {e}"))?;
-    fs::rename(&tmp, &path).map_err(|e| format!("Gagal menyimpan config: {e}"))?;
+    fs::write(&tmp, s).map_err(|e| format!("Could not save config: {e}"))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("Could not save config: {e}"))?;
     *CONF.write().unwrap() = Arc::new(c);
     apply(&get());
     Ok(())
@@ -228,6 +232,10 @@ pub fn config_path() -> PathBuf {
 /// Snapshot of the live config; `save` swaps it, existing snapshots stay valid.
 pub fn get() -> Arc<Conf> {
     CONF.read().unwrap().clone()
+}
+
+pub fn english() -> bool {
+    get().ui.language != "id"
 }
 
 pub fn log(msg: &str) {
@@ -276,6 +284,7 @@ pub struct Info {
     pub tts_voice: String,
     pub router_ready: bool,
     pub auto_collapse_ms: u64,
+    pub language: String,
 }
 
 pub fn info() -> Info {
@@ -287,6 +296,7 @@ pub fn info() -> Info {
         tts_voice: c.tts.voice.clone(),
         router_ready: !router_key().is_empty(),
         auto_collapse_ms: c.ui.auto_collapse_ms,
+        language: c.ui.language.clone(),
     }
 }
 
@@ -307,6 +317,9 @@ mod tests {
         assert_eq!(c.ui.auto_collapse_ms, 2000);
         assert_eq!(c.router.models, ["a", "b"]);
         c.ui.dictate_key = "lalt".into();
+        assert!(validate(&mut c).is_err());
+        let mut c = Conf::default();
+        c.ui.language = "fr".into();
         assert!(validate(&mut c).is_err());
     }
 }

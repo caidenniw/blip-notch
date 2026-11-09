@@ -438,7 +438,7 @@ pub async fn lyrics(
     }
 
     if !any_network {
-        return Err("koneksi lrclib gagal".into());
+        return Err("lrclib connection failed".into());
     }
 
     Ok(serde_json::json!({
@@ -464,7 +464,7 @@ pub fn open_target(target: String) -> Result<(), String> {
         .iter()
         .any(|p| target.starts_with(p))
     {
-        return Err("target ditolak".into());
+        return Err("target rejected".into());
     }
     std::process::Command::new("explorer")
         .arg(&target)

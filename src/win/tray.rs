@@ -1,5 +1,5 @@
 //! System tray icon and popup menu.
-use windows::core::{w, PCWSTR};
+use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::*;
@@ -53,17 +53,19 @@ impl Tray {
                 Err(_) => return,
             };
 
-            let _ = AppendMenuW(menu, MF_STRING, CMD_TOGGLE, w!("Buka/Tutup"));
+            let en = crate::conf::english();
+            let l = |e: &str, i: &str| windows::core::HSTRING::from(if en { e } else { i });
+            let _ = AppendMenuW(menu, MF_STRING, CMD_TOGGLE, &l("Open/Close", "Buka/Tutup"));
 
             let autostart_flags = if crate::win::autostart::is_enabled() {
                 MF_STRING | MF_CHECKED
             } else {
                 MF_STRING | MF_UNCHECKED
             };
-            let _ = AppendMenuW(menu, autostart_flags, CMD_AUTOSTART, w!("Mulai saat login"));
-            let _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Pengaturan…"));
+            let _ = AppendMenuW(menu, autostart_flags, CMD_AUTOSTART, &l("Start at login", "Mulai saat login"));
+            let _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, &l("Settings…", "Pengaturan…"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-            let _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Keluar"));
+            let _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, &l("Quit", "Keluar"));
 
             let mut pt = POINT::default();
             let _ = GetCursorPos(&mut pt);

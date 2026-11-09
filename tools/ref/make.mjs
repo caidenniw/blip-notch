@@ -29,11 +29,11 @@ let failed = 0;
 for (const name of names) {
   const src = readFileSync(join(scenDir, name + '.js'), 'utf8');
   const shotAt = Number((src.match(/__shotAt\s*=\s*(\d+)/) || [])[1] || 3000);
-  const scripts = ['tools/ref/fixed.js', 'tools/ref/mock.js', `tools/ref/scenarios/${name}.js`, 'ui/lib.js', 'ui/app.js']
+  const scripts = ['tools/ref/fixed.js', 'tools/ref/mock.js', `tools/ref/scenarios/${name}.js`, 'ui/i18n.js', 'ui/lib.js', 'ui/app.js']
     .map(tag).join('\n  ');
   const page = html
     .replace(/<link rel="stylesheet" href="style.css"\s*\/?>/, `<link rel="stylesheet" href="${url('ui/style.css')}" />`)
-    .replace(/<script src="lib.js"><\/script>\s*<script src="app.js"><\/script>/, scripts);
+    .replace(/<script src="i18n.js"><\/script>\s*<script src="lib.js"><\/script>\s*<script src="app.js"><\/script>/, scripts);
   if (page === html || !page.includes('fixed.js') || !page.includes(url('ui/style.css'))) throw new Error('index.html shape changed');
   const htmlFile = join(out, name + '.html');
   const png = join(out, name + '.edge.png');

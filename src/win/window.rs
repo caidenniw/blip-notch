@@ -133,12 +133,16 @@ pub fn set_toggle_hotkey(hwnd: HWND, name: &str) -> Result<(), String> {
         "ctrl+alt+b" => (MOD_CONTROL | MOD_ALT, 0x42),
         "ctrl+alt+space" => (MOD_CONTROL | MOD_ALT, 0x20),
         "ctrl+shift+space" => (MOD_CONTROL | MOD_SHIFT, 0x20),
-        _ => return Err(format!("Nilai tidak dikenal: {name}")),
+        _ => return Err(format!("Unknown value: {name}")),
     };
     unsafe {
         let _ = UnregisterHotKey(Some(hwnd), 1);
-        RegisterHotKey(Some(hwnd), 1, mods | MOD_NOREPEAT, vk).map_err(|_| "Hotkey dipakai aplikasi lain".to_string())
+        RegisterHotKey(Some(hwnd), 1, mods | MOD_NOREPEAT, vk).map_err(|_| "Hotkey is used by another app".to_string())
     }
+}
+
+pub fn settings_title() -> &'static str {
+    if crate::conf::english() { "Blip Settings" } else { "Pengaturan Blip" }
 }
 
 /// Normal (activating) dark-titled window that hosts the settings document.
@@ -166,7 +170,8 @@ pub fn create_settings(proc: Proc) -> windows::core::Result<HWND> {
         let wa = mi.rcWork;
         let x = wa.left + ((wa.right - wa.left) - w).max(0) / 2;
         let y = wa.top + ((wa.bottom - wa.top) - h).max(0) / 2;
-        let hwnd = CreateWindowExW(WINDOW_EX_STYLE(0), SET_CLASS, w!("Pengaturan Blip"), style, x, y, w, h, None, None, Some(hinst.into()), None)?;
+        let title = windows::core::HSTRING::from(settings_title());
+        let hwnd = CreateWindowExW(WINDOW_EX_STYLE(0), SET_CLASS, &title, style, x, y, w, h, None, None, Some(hinst.into()), None)?;
         let dark = windows::core::BOOL(1);
         let _ = windows::Win32::Graphics::Dwm::DwmSetWindowAttribute(
             hwnd,

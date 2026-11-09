@@ -5,7 +5,7 @@
   const D = __dom;
   const wrappers = new Map();
   const listeners = new Map(); // id -> { type: [{fn, capture, once}] }
-  const DOC = 0;              // pseudo id for `document`
+  const DOC = -3;             // distinct from native nodes and window (-2)
 
   const camelToKebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
   const kebabToCamel = s => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -362,20 +362,10 @@
   g.console = { log: (...a) => D.log(fmt(a)), info: (...a) => D.log(fmt(a)), warn: (...a) => D.log('warn: ' + fmt(a)), error: (...a) => D.log('error: ' + fmt(a)), debug() {} };
   g.__reportError = e => D.log('js error: ' + (e && e.message ? e.message : String(e)) + '\n' + (e && e.stack ? e.stack : ''));
 
-  const WD = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-  const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const origLDS = Date.prototype.toLocaleDateString;
-  Date.prototype.toLocaleDateString = function (loc, o) {
-    if (loc === 'id-ID' && o && o.weekday === 'short' && o.day === 'numeric' && o.month === 'short') {
-      return WD[this.getDay()] + ', ' + this.getDate() + ' ' + MO[this.getMonth()];
-    }
-    return origLDS.call(this, loc, o);
-  };
-
   Object.assign(g, {
     window: g, self: g, document, Node, Element, Text, HTMLElement: Element, EventTarget,
     Event, MouseEvent, PointerEvent, KeyboardEvent, WheelEvent, Image, ResizeObserver, MutationObserver,
-    navigator: { userAgent: 'Blip', language: 'id-ID' },
+    navigator: { userAgent: 'Blip', language: 'en-US' },
     matchMedia: q => ({ matches: q.includes('reduce') ? D.reducedMotion() : false, addEventListener() {}, removeEventListener() {} }),
   });
   g.addEventListener = EventTarget.prototype.addEventListener;

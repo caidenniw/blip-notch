@@ -50,7 +50,7 @@ fn route(path: &str, method: &tiny_http::Method, body: &str) -> (u16, String) {
                 .and_then(|v| v["text"].as_str().map(|s| s.trim().to_string()))
                 .unwrap_or_default();
             if text.is_empty() {
-                return (400, r#"{"ok":false,"error":"text kosong"}"#.into());
+                return (400, r#"{"ok":false,"error":"empty text"}"#.into());
             }
             post(Event::UiAsk(text));
             (200, ok)
@@ -58,11 +58,11 @@ fn route(path: &str, method: &tiny_http::Method, body: &str) -> (u16, String) {
         "/agent" if is_post => {
             let v: serde_json::Value = match serde_json::from_str(body) {
                 Ok(v) => v,
-                Err(_) => return (400, r#"{"ok":false,"error":"json rusak"}"#.into()),
+                Err(_) => return (400, r#"{"ok":false,"error":"invalid json"}"#.into()),
             };
             let state = v["state"].as_str().unwrap_or("");
             if !matches!(state, "working" | "waiting" | "done") {
-                return (400, r#"{"ok":false,"error":"state harus working|waiting|done"}"#.into());
+                return (400, r#"{"ok":false,"error":"state must be working|waiting|done"}"#.into());
             }
             let agent = v["agent"].as_str().unwrap_or("agent").to_string();
             let text = Some(v["text"].as_str().unwrap_or("").to_string());

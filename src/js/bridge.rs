@@ -66,7 +66,7 @@ pub fn dispatch(id: u32, cmd: &str, args: &str) -> Outcome {
         "config_get" => Outcome::Now(serde_json::to_value(&*crate::conf::get()).map_err(|e| e.to_string())),
         "config_set" => {
             let Ok(c) = serde_json::from_value::<crate::conf::Conf>(a.get("conf").cloned().unwrap_or(Value::Null)) else {
-                return Outcome::Now(Err("Config rusak".into()));
+                return Outcome::Now(Err("Invalid config".into()));
             };
             let old = crate::conf::get();
             if c.ui.toggle_hotkey != old.ui.toggle_hotkey {
@@ -74,21 +74,33 @@ pub fn dispatch(id: u32, cmd: &str, args: &str) -> Outcome {
                     return Outcome::Now(Err(e));
                 }
             }
+            let lang_changed = c.ui.language != old.ui.language;
             if let Err(e) = crate::conf::save(c) {
                 // Keep the registered hotkey in sync with the file that stayed on disk.
                 let _ = crate::win::window::set_toggle_hotkey(bus::hwnd(), &old.ui.toggle_hotkey);
                 return Outcome::Now(Err(e));
+            }
+            let sh = bus::settings_hwnd();
+            if lang_changed && !sh.0.is_null() {
+                let title = windows::core::HSTRING::from(crate::win::window::settings_title());
+                unsafe {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowTextW(sh, &title);
+                }
             }
             bus::post(Event::Config);
             Outcome::Now(Ok(Value::Null))
         }
         "autostart_get" => Outcome::Now(Ok(json!(crate::win::autostart::is_enabled()))),
         "autostart_set" => unit(crate::win::autostart::set_enabled(a.get("on").and_then(Value::as_bool).unwrap_or(false))),
-        "router_test" => {
+        "ai_connect" => {
+            let models = strings(&a, "models");
+            if models.is_empty() {
+                return Outcome::Now(Err("no model".into()));
+            }
             let (base, key) = (s(&a, "baseUrl"), s(&a, "apiKey"));
             crate::rt::spawn(async move {
-                let result = crate::ai::router_test(base, key).await.map(|v| json!(v));
-                bus::post_settings(Event::Resolve { id, result });
+                let r = crate::ai::probe_models(base, key, models).await;
+                bus::post_settings(Event::Resolve { id, result: Ok(json!(r)) });
             });
             Outcome::Later
         }
@@ -192,7 +204,7 @@ fn info_json() -> Value {
     let i = crate::conf::info();
     json!({
         "model": i.model, "stt": i.stt, "tts": i.tts, "ttsVoice": i.tts_voice,
-        "routerReady": i.router_ready, "autoCollapseMs": i.auto_collapse_ms,
+        "routerReady": i.router_ready, "autoCollapseMs": i.auto_collapse_ms, "language": i.language,
     })
 }
 

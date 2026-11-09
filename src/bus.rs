@@ -124,6 +124,10 @@ pub fn init_settings(hwnd: HWND) {
     SET_HWND.store(hwnd.0 as isize, Ordering::SeqCst);
 }
 
+pub fn settings_hwnd() -> HWND {
+    HWND(SET_HWND.load(Ordering::SeqCst) as *mut _)
+}
+
 /// Queue an event for the settings window (dropped when it is closed).
 pub fn post_settings(e: Event) {
     let h = HWND(SET_HWND.load(Ordering::SeqCst) as *mut _);

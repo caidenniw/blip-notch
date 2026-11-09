@@ -3,11 +3,11 @@
 // Pure helpers shared by the WebView UI and node tests. No DOM access here.
 
 function parseTimer(text) {
-  const m = /\b(?:timer|pasang timer|ingatkan(?: saya)?(?: dalam)?)\s*(?:selama\s*)?(\d+)\s*(detik|menit|jam)\b/i.exec(text || '');
+  const m = /\b(?:timer|pasang timer|ingatkan(?: saya)?(?: dalam)?|set a timer for|remind me in)\s*(?:selama\s*|for\s*)?(\d+)\s*(detik|menit|jam|secs?|seconds?|mins?|minutes?|hours?)\b/i.exec(text || '');
   if (!m) return null;
   const n = parseInt(m[1], 10);
   const unit = m[2].toLowerCase();
-  const mult = unit === 'detik' ? 1 : unit === 'menit' ? 60 : 3600;
+  const mult = /^(detik|sec)/.test(unit) ? 1 : /^(menit|min)/.test(unit) ? 60 : 3600;
   const secs = n * mult;
   return secs > 0 ? secs : null;
 }
@@ -39,7 +39,7 @@ function parseIntent(text) {
   const t = String(text || '').toLowerCase().trim().replace(/[.,!?]+$/, '').trim();
   if (!t) return null;
 
-  let m = /^(?:tambah|catat)\s+(?:tugas|todo)\s+(.+)$/.exec(t);
+  let m = /^(?:tambah|catat|add)\s+(?:tugas|todo|task)\s+(.+)$/.exec(t);
   if (m) {
     const body = m[1].trim();
     if (!body || body.split(/\s+/).length > 20) return null;
@@ -49,11 +49,11 @@ function parseIntent(text) {
   const words = t.split(/\s+/).length;
   if (words > 7) return null;
 
-  if (/^(?:sudah\s+)?minum(?:\s+air)?$/.test(t)) return { type: 'water' };
-  if (/^(?:mulai\s+)?(?:fokus|pomodoro)$/.test(t)) return { type: 'focus', cmd: 'start' };
-  if (/^(?:stop|berhenti|hentikan|selesai)\s+(?:fokus|pomodoro)$/.test(t)) return { type: 'focus', cmd: 'stop' };
+  if (/^(?:sudah\s+)?minum(?:\s+air)?$/.test(t) || /^(?:drink|drank|log)(?:\s+water)?$/.test(t)) return { type: 'water' };
+  if (/^(?:mulai\s+|start\s+)?(?:fokus|focus|pomodoro)$/.test(t)) return { type: 'focus', cmd: 'start' };
+  if (/^(?:stop|berhenti|hentikan|selesai|end)\s+(?:fokus|focus|pomodoro)$/.test(t)) return { type: 'focus', cmd: 'stop' };
 
-  m = /^(?:putar|puter|mainkan|play)\s+(.+?)\s+di\s+(youtube|spotify)$/.exec(t);
+  m = /^(?:putar|puter|mainkan|play)\s+(.+?)\s+(?:di|on)\s+(youtube|spotify)$/.exec(t);
   if (m) {
     const q = encodeURIComponent(m[1]);
     return m[2] === 'spotify'
@@ -63,16 +63,16 @@ function parseIntent(text) {
   m = /^(?:buka|open|jalankan)\s+(.+)$/.exec(t);
   if (m && APPS[m[1]]) return { type: 'open', label: m[1], target: APPS[m[1]] };
 
-  if (/\b(volume|suara)\b/.test(t)) {
-    m = /\b(?:volume|suara)\s+(\d{1,3})\b/.exec(t);
+  if (/\b(volume|suara|sound)\b/.test(t)) {
+    m = /\b(?:volume|suara|sound)\s+(\d{1,3})\b/.exec(t);
     if (m) return { type: 'volume', dir: 'set', level: Math.min(100, parseInt(m[1], 10)) };
     const steps = /\b(banget|sekali|full)\b/.test(t) ? 10 : 5;
     if (/\b(mute|bisu|matikan)\b/.test(t)) return { type: 'volume', dir: 'mute', steps: 1 };
-    if (/\b(naik|besar|besarkan|keras|kencang|tambah|up)\b/.test(t)) return { type: 'volume', dir: 'up', steps };
-    if (/\b(turun|kecil|kecilkan|pelan|kurangi|down)\b/.test(t)) return { type: 'volume', dir: 'down', steps };
+    if (/\b(naik|besar|besarkan|keras|kencang|tambah|up|louder|raise)\b/.test(t)) return { type: 'volume', dir: 'up', steps };
+    if (/\b(turun|kecil|kecilkan|pelan|kurangi|down|quieter|lower|softer)\b/.test(t)) return { type: 'volume', dir: 'down', steps };
   }
 
-  if (/\b(lagu|lagunya|musik|musiknya|music|track)\b/.test(t) || words <= 2) {
+  if (/\b(lagu|lagunya|musik|musiknya|music|track|song)\b/.test(t) || words <= 2) {
     if (/\b(next|skip|selanjutnya|berikutnya)\b|ganti lagu/.test(t)) return { type: 'media', cmd: 'next' };
     if (/\b(sebelumnya|previous|prev)\b|lagu tadi/.test(t)) return { type: 'media', cmd: 'prev' };
     if (/\b(pause|jeda|stop|berhenti|hentikan)\b/.test(t)) return { type: 'media', cmd: 'pause' };
@@ -82,10 +82,10 @@ function parseIntent(text) {
 }
 
 const INTENT_LABEL = {
-  next: 'lagu berikutnya', prev: 'lagu sebelumnya', pause: 'musik dijeda', play: 'musik diputar',
-  up: 'volume naik', down: 'volume turun', mute: 'volume mute',
-  water: '+250 ml dicatat', focusStart: 'fokus dimulai', focusStop: 'fokus dihentikan',
-  todo: 'tugas ditambah', set: 'volume diatur',
+  next: 'intent.next', prev: 'intent.prev', pause: 'intent.pause', play: 'intent.play',
+  up: 'intent.up', down: 'intent.down', mute: 'intent.mute',
+  water: 'intent.water', focusStart: 'intent.focusStart', focusStop: 'intent.focusStop',
+  todo: 'intent.todo', set: 'intent.set',
 };
 
 function normKey(s) {
@@ -159,11 +159,11 @@ function lrcIndex(lines, pos) {
   return idx;
 }
 
-// Trailing "@14:30", "jam 14:30" or "jam 14" becomes a due time today, or tomorrow when already past.
+// Trailing "@14:30", "jam 14:30", "at 14" etc. becomes a due time today, or tomorrow when already past.
 function parseTodo(text, now) {
   const base = now == null ? Date.now() : now;
   let t = String(text || '').trim();
-  const m = /\s+(?:@\s*(\d{1,2})(?::(\d{2}))?|jam\s+(\d{1,2})(?::(\d{2}))?)\s*$/i.exec(t);
+  const m = /\s+(?:@\s*(\d{1,2})(?::(\d{2}))?|(?:jam|at)\s+(\d{1,2})(?::(\d{2}))?)\s*$/i.exec(t);
   if (!m) return { text: t, dueAt: null };
   const hh = Number(m[1] != null ? m[1] : m[3]);
   const mm = Number(m[2] != null ? m[2] : m[4] != null ? m[4] : 0);
@@ -255,15 +255,18 @@ function trimHistory(h, n) {
 }
 
 function parseMemory(text) {
-  let m = /^\s*(?:tolong\s+)?ingat(?:lah)?\s+(?:bahwa\s+)?(.{3,200}?)\s*$/i.exec(text);
+  let m = /^\s*(?:tolong\s+)?ingat(?:lah)?\s+(?:bahwa\s+)?(.{3,200}?)\s*$/i.exec(text)
+    || /^\s*(?:please\s+)?remember\s+(?:that\s+)?(.{3,200}?)\s*$/i.exec(text);
   if (m) return m[1].endsWith('?') ? null : { type: 'remember', text: m[1] };
-  if (/^\s*lupakan\s+(?:semua|semuanya)\s*$/i.test(text)) return { type: 'forget' };
-  if (/^\s*(?:apa\s+(?:yang\s+)?kamu\s+ingat|kamu\s+ingat\s+apa)\s*\??\s*$/i.test(text)) return { type: 'recall' };
+  if (/^\s*lupakan\s+(?:semua|semuanya)\s*$/i.test(text) || /^\s*forget\s+everything\s*$/i.test(text)) return { type: 'forget' };
+  if (/^\s*(?:apa\s+(?:yang\s+)?kamu\s+ingat|kamu\s+ingat\s+apa)\s*\??\s*$/i.test(text)
+    || /^\s*what\s+do\s+you\s+remember\s*\??\s*$/i.test(text)) return { type: 'recall' };
   return null;
 }
 
+// Returns an i18n key.
 function greeting(hour) {
-  return hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
+  return hour < 11 ? 'greet.morning' : hour < 15 ? 'greet.noon' : hour < 18 ? 'greet.afternoon' : 'greet.evening';
 }
 
 function nextTask(todos) {
@@ -274,24 +277,23 @@ function nextTask(todos) {
 }
 
 // First matching proactive nudge, or null. `c.shown` maps nudge id -> last shown ms (per-id cooldown).
+// Text is an i18n `key` + `vars`; `vars.greet` is itself a key.
 function pickNudge(c) {
   const ok = (id, ms) => !c.shown[id] || c.now - c.shown[id] >= ms;
   if (c.battery != null && c.battery <= 20 && !c.plugged && ok('battery', 30 * 60000)) {
-    return { id: 'battery', text: `baterai ${c.battery}%, colok charger`, tone: '', mood: 'scared' };
+    return { id: 'battery', key: 'nudge.battery', vars: { n: c.battery }, tone: '', mood: 'scared' };
   }
   if ((c.hour >= 23 || c.hour < 4) && ok('night', 8 * 3600000)) {
-    return { id: 'night', text: 'sudah larut, jangan lupa istirahat', tone: 'ok', mood: 'tired' };
+    return { id: 'night', key: 'nudge.night', vars: {}, tone: 'ok', mood: 'tired' };
   }
   if (c.hour >= 17 && c.hour < 19 && c.tasksLeft > 0 && ok('evening', 12 * 3600000)) {
-    return { id: 'evening', text: `${c.tasksLeft} tugas belum selesai hari ini`, tone: 'ok', mood: 'happy' };
+    return { id: 'evening', key: 'nudge.evening', vars: { n: c.tasksLeft }, tone: 'ok', mood: 'happy' };
   }
   if (c.hour >= 5 && c.hour < 22 && ok('greet', 12 * 3600000)) {
-    return {
-      id: 'greet',
-      text: `${greeting(c.hour)}. ${c.tasksLeft ? c.tasksLeft + ' tugas menunggu' : 'belum ada tugas'}`,
-      tone: 'ok',
-      mood: 'cheer',
-    };
+    const greet = greeting(c.hour);
+    return c.tasksLeft
+      ? { id: 'greet', key: 'nudge.greet.tasks', vars: { greet, n: c.tasksLeft }, tone: 'ok', mood: 'cheer' }
+      : { id: 'greet', key: 'nudge.greet.none', vars: { greet }, tone: 'ok', mood: 'cheer' };
   }
   return null;
 }

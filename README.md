@@ -4,7 +4,7 @@
 
 A *dynamic-island* AI assistant for Windows 10/11. Hover the notch and a panel opens with Today, Music, Focus, Tasks, Water, Shelf and Chat pages (dots, arrows, scroll wheel). Press the Copilot key: the island listens, answers with text and voice, then shrinks. When the mouse leaves, the panel closes unless you are typing or the AI is answering.
 
-Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out the DOM/CSS, and Direct2D/DirectWrite paint a layered Win32 window. No WebView2 or Electron process. MIT licensed; UI and default persona are Indonesian.
+Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out the DOM/CSS, and Direct2D/DirectWrite paint a layered Win32 window. No WebView2 or Electron process. MIT licensed; English and Indonesian interfaces, with an Indonesian default AI persona.
 
 <p align="center">
   <img src="docs/screenshots/music-compact.png" alt="Compact notch while music plays" />
@@ -36,10 +36,10 @@ Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out th
 
 ## Install
 
-1. Download `Blip_0.1.0_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
+1. Download `Blip_0.3.0_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
 2. The installer is unsigned: SmartScreen shows a warning. Click "More info" -> "Run anyway".
 3. Run Blip once. It creates `%APPDATA%\Blip\blip.config.json`.
-4. Open Settings (gear in the notch header or tray -> "Pengaturan…"), paste the API key under AI, then Test connection.
+4. Open Settings (gear in the notch header or tray), enter the endpoint, API key and model ID under AI, then Connect. Settings are saved only when the main model answers successfully.
 
 ## Setup
 
@@ -97,12 +97,14 @@ Text chat works without any of this.
 | Mouse leaves | shrinks after 300 ms; stays open if pinned, input has text, dragging, or AI answering |
 | `‹` `›`, dots, wheel | switch pages |
 | Chat | history saved (40 messages, `hapus` clears); chips: summarize / translate clipboard, today (clipboard is read only when a chip is clicked) |
-| `Ctrl+Alt+B` (configurable in Settings -> Sistem) | same as tapping the Copilot key |
+| `Ctrl+Alt+B` (configurable in Settings → General) | same as tapping the Copilot key |
 | `Ctrl+Alt+Q` | quit |
 
 Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Pengaturan… (settings), Keluar (quit).
 
 Settings window (600×540, gear icon in the header): AI endpoint/key/models with a live model test, voice input and output, notch behaviour, page visibility, focus and water targets, autostart, hotkey, dictate key, motion and animation speed. Hotkey choices: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` stays fixed. Changes to `blip.config.json` apply immediately; island prefs (hover, close delay, hidden pages, nudge, focus/water numbers) live in `localstorage.json`.
+
+Version 0.3.0 adds instant English/Indonesian switching, connection checks for main and backup AI models, and reorganized Settings: General, AI, Voice, Notch, Pages, Focus & Water. Page switches apply immediately; hidden pages also disappear from Today. Fixed native delegated clicks firing twice, which previously reverted switches immediately.
 
 Local commands (voice or text, no LLM, up to 7 words; Indonesian): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute`, `volume 50`, `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <title> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <text> [@14:30]`.
 

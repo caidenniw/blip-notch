@@ -16,28 +16,63 @@ pub fn reset_cooldown() {
     *COOLDOWN.lock().unwrap() = None;
 }
 
-/// `GET {base}/models` → sorted model ids (max 50); used by "Tes koneksi".
-pub async fn router_test(base: String, key: String) -> Result<Vec<String>, String> {
+#[derive(serde::Serialize)]
+pub struct Probe {
+    pub model: String,
+    pub ok: bool,
+    pub ms: u64,
+    pub code: &'static str,
+    pub detail: String,
+}
+
+/// Settings "Connect": one real non-streamed chat request per model, all concurrently.
+pub async fn probe_models(base: String, key: String, models: Vec<String>) -> Vec<Probe> {
     let base = base.trim().trim_end_matches('/').to_string();
-    if !(base.starts_with("http://") || base.starts_with("https://")) {
-        return Err("Endpoint harus diawali http:// atau https://".into());
-    }
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(8)).build().map_err(|e| e.to_string())?;
-    let mut req = client.get(format!("{base}/models")).header("Authorization", format!("Bearer {key}"));
-    for (k, v) in &conf::get().router.headers {
-        req = req.header(k.as_str(), v.as_str());
-    }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let body = resp.text().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
-        return Err(format!("HTTP {} {}", status.as_u16(), body.chars().take(160).collect::<String>()));
-    }
-    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-    let mut ids: Vec<String> = v["data"].as_array().into_iter().flatten().filter_map(|m| m["id"].as_str().map(str::to_string)).collect();
-    ids.sort();
-    ids.truncate(50);
-    Ok(ids)
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build().unwrap_or_default();
+    let headers = conf::get().router.headers.clone();
+    let fetch = |model: String, cap: bool| {
+        let mut body = serde_json::json!({ "model": model, "messages": [{ "role": "user", "content": "ping" }], "stream": false });
+        if cap {
+            body["max_tokens"] = 16.into();
+        }
+        let mut req = client.post(format!("{base}/chat/completions"));
+        if !key.trim().is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", key.trim()));
+        }
+        for (k, v) in &headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+        let req = req.json(&body);
+        async move {
+            let t = std::time::Instant::now();
+            let resp = req.send().await?;
+            let st = resp.status().as_u16();
+            let text = resp.text().await?;
+            Ok::<_, reqwest::Error>((st, text, t.elapsed().as_millis() as u64))
+        }
+    };
+    let probe = |model: String| {
+        let fetch = &fetch;
+        async move {
+            let mut r = fetch(model.clone(), true).await;
+            if matches!(&r, Ok((400, b, _)) if b.contains("max_tokens")) {
+                r = fetch(model.clone(), false).await;
+            }
+            let (ok, code, detail, ms) = match r {
+                Err(e) => (false, if e.is_timeout() { "timeout" } else { "network" }, e.to_string(), 0),
+                Ok((st, body, ms)) if (200..300).contains(&st) => {
+                    let good = serde_json::from_str::<serde_json::Value>(&body).map(|v| v["choices"].is_array()).unwrap_or(false);
+                    if good { (true, "ok", String::new(), ms) } else { (false, "bad_response", body.chars().take(160).collect(), ms) }
+                }
+                Ok((st, body, ms)) => {
+                    let code = match st { 401 | 403 => "auth", 404 => "not_found", 429 => "rate", _ => "http" };
+                    (false, code, format!("HTTP {st} {}", body.chars().take(160).collect::<String>()), ms)
+                }
+            };
+            Probe { model, ok, ms, code, detail }
+        }
+    };
+    futures_util::future::join_all(models.into_iter().map(probe)).await
 }
 
 fn aborts() -> std::sync::MutexGuard<'static, Option<HashMap<String, AbortHandle>>> {
@@ -65,7 +100,7 @@ pub fn chat_abort(id: String) {
 
 async fn run_chat(id: String, messages: Vec<serde_json::Value>, speak: bool, memory: String) {
     let raw_chain = conf::model_chain();
-    let mut last_err = "tidak ada model di config".to_string();
+    let mut last_err = "no model configured".to_string();
     if raw_chain.is_empty() {
         bus::post(Event::ChatError { id: id.clone(), error: last_err.clone() });
         return;
@@ -104,7 +139,7 @@ async fn run_chat(id: String, messages: Vec<serde_json::Value>, speak: bool, mem
                 return;
             }
             Ok(_) => {
-                last_err = format!("{model} balas kosong");
+                last_err = format!("{model} returned an empty reply");
                 conf::log(&last_err);
             } 
             Err((sent, err)) => {
@@ -130,13 +165,13 @@ async fn run_chat(id: String, messages: Vec<serde_json::Value>, speak: bool, mem
                     }
                 }
                 if sent > 0 {
-                    bus::post(Event::ChatError { id: id.clone(), error: format!("terputus: {last_err}") });
+                    bus::post(Event::ChatError { id: id.clone(), error: format!("interrupted: {last_err}") });
                     return;
                 }
             }
         }
     }
-    bus::post(Event::ChatError { id: id.clone(), error: format!("semua model gagal. terakhir: {last_err}") });
+    bus::post(Event::ChatError { id: id.clone(), error: format!("all models failed. last: {last_err}") });
 }
 
 #[cfg(windows)]
@@ -275,12 +310,12 @@ fn local_stt(wav: Vec<u8>) -> Result<String, String> {
         .creation_flags(0x08000000)
         .output();
     let _ = std::fs::remove_file(&tmp);
-    let out = out.map_err(|e| format!("uv tidak ditemukan; isi stt.apiKey Groq atau install uv ({e})"))?;
+    let out = out.map_err(|e| format!("uv not found; set stt.apiKey (Groq) or install uv ({e})"))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
         let err = String::from_utf8_lossy(&out.stderr);
-        Err(format!("whisper lokal gagal: {}", err.chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()))
+        Err(format!("local whisper failed: {}", err.chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()))
     }
 }
 
@@ -385,10 +420,10 @@ async fn edge_bytes(voice: String, text: String) -> Result<Vec<u8>, String> {
         let out = match res {
             Ok(o) if o.status.success() => std::fs::read(&path).map_err(|e| e.to_string()),
             Ok(o) => Err(format!(
-                "edge-tts gagal: {}",
+                "edge-tts failed: {}",
                 String::from_utf8_lossy(&o.stderr).chars().rev().take(300).collect::<String>()
             )),
-            Err(e) => Err(format!("edge-tts tidak bisa dijalankan: {e}")),
+            Err(e) => Err(format!("edge-tts could not start: {e}")),
         };
         let _ = std::fs::remove_file(&path);
         out

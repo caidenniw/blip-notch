@@ -15,11 +15,13 @@
       router: { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-test', models: ['gpt-4o-mini'], headers: {} },
       stt: { provider: 'groq', apiKey: '', model: 'whisper-large-v3-turbo', language: 'id' },
       tts: { enabled: true, voice: 'id-ID-ArdiNeural', provider: 'edge', elevenApiKey: '', elevenVoiceId: '', elevenModel: 'eleven_multilingual_v2' },
-      ui: { port: 51321, holdMs: 300, autoCollapseMs: 5000, toggleHotkey: 'ctrl+alt+b', dictateKey: 'rctrl', hideFullscreen: true, autoCompact: true, motion: 'system', animSpeed: 'normal' },
+      ui: { port: 51321, holdMs: 300, autoCollapseMs: 5000, toggleHotkey: 'ctrl+alt+b', dictateKey: 'rctrl', hideFullscreen: true, autoCompact: true, motion: 'system', animSpeed: 'normal', language: 'en' },
       systemPrompt: '',
     };
     else if (cmd === 'autostart_get') r = false;
-    else if (cmd === 'router_test') r = ['gpt-4o', 'gpt-4o-mini'];
+    else if (cmd === 'ai_connect') r = ((args && args.models) || []).map(function (m) {
+      return /bad/.test(m) ? { model: m, ok: false, ms: 0, code: 'auth', detail: 'HTTP 401 invalid key' } : { model: m, ok: true, ms: 420, code: 'ok', detail: '' };
+    });
     else if (cmd === 'shelf_info') r = ((args && args.paths) || []).map(function (p) {
       var name = basename(p);
       return { path: p, name: name, ext: ext(name), size: 2516582, dir: false };

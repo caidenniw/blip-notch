@@ -371,7 +371,7 @@ pub fn sys_status() -> serde_json::Value {
 
 pub fn volume(dir: String, steps: Option<u32>, level: Option<u32>) -> Result<(), String> {
     com_init();
-    let pair = endpoint().ok_or("audio tidak tersedia")?;
+    let pair = endpoint().ok_or("audio unavailable")?;
     let ep = &pair.1;
     let nil = std::ptr::null();
     unsafe {
@@ -398,7 +398,7 @@ pub fn volume(dir: String, steps: Option<u32>, level: Option<u32>) -> Result<(),
                     .map_err(|e| e.to_string())?;
                 let _ = ep.SetMute(false, nil);
             }
-            _ => return Err("perintah volume tidak dikenal".into()),
+            _ => return Err("unknown volume command".into()),
         }
     }
     Ok(())
@@ -436,7 +436,7 @@ pub fn shelf_info(paths: Vec<String>) -> Vec<serde_json::Value> {
 
 pub fn open_path(path: String) -> Result<(), String> {
     if !valid_file(&path) {
-        return Err("file tidak ditemukan".into());
+        return Err("file not found".into());
     }
     std::process::Command::new("explorer")
         .arg(&path)
@@ -450,9 +450,9 @@ pub fn shelf_from_clipboard() -> Result<Vec<serde_json::Value>, String> {
     let paths = cb
         .get()
         .file_list()
-        .map_err(|_| "clipboard tidak berisi file".to_string())?;
+        .map_err(|_| "clipboard has no files".to_string())?;
     if paths.is_empty() {
-        return Err("clipboard tidak berisi file".into());
+        return Err("clipboard has no files".into());
     }
     let paths_str: Vec<String> = paths
         .into_iter()
@@ -465,21 +465,21 @@ pub fn clipboard_text() -> Result<String, String> {
     let t = arboard::Clipboard::new()
         .map_err(|e| e.to_string())?
         .get_text()
-        .map_err(|_| "clipboard tidak berisi teks".to_string())?;
+        .map_err(|_| "clipboard has no text".to_string())?;
     let t = t.trim();
     if t.is_empty() {
-        return Err("clipboard kosong".into());
+        return Err("clipboard is empty".into());
     }
     Ok(t.chars().take(4000).collect())
 }
 
 pub fn shelf_copy(paths: Vec<String>) -> Result<(), String> {
     if paths.is_empty() {
-        return Err("tidak ada file untuk disalin".into());
+        return Err("no files to copy".into());
     }
     for p in &paths {
         if !valid_file(p) {
-            return Err("file tidak valid".into());
+            return Err("invalid file".into());
         }
     }
     let path_bufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
@@ -489,7 +489,7 @@ pub fn shelf_copy(paths: Vec<String>) -> Result<(), String> {
 
 pub fn reveal_path(path: String) -> Result<(), String> {
     if !valid_file(&path) {
-        return Err("file tidak ditemukan".into());
+        return Err("file not found".into());
     }
     std::process::Command::new("explorer")
         .arg(format!("/select,{path}"))
@@ -516,11 +516,11 @@ impl raw_window_handle::HasWindowHandle for Hwnd {
 /// Must run on the UI thread (OLE drag loop).
 pub fn shelf_drag_out(paths: Vec<String>) -> Result<(), String> {
     if paths.is_empty() {
-        return Err("tidak ada file untuk ditarik".into());
+        return Err("no files to drag".into());
     }
     for p in &paths {
         if !valid_file(p) {
-            return Err(format!("file tidak valid: {p}"));
+            return Err(format!("invalid file: {p}"));
         }
     }
 
