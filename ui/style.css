@@ -543,6 +543,18 @@ ol.lyr {
 .empty { font-size: 11.5px; color: var(--mist); padding: 4px 2px; }
 .tadd { display: flex; gap: 6px; flex: none; }
 .tadd .tin { flex: 1; width: auto; }
+.reminder-row, .reminder-options, .reminder-fields { display: flex; align-items: center; gap: 10px; flex: none; }
+.reminder-row { justify-content: space-between; min-height: 24px; }
+.reminder-toggle { display: flex; align-items: center; gap: 6px; color: var(--cyan); }
+.reminder-picker { display: flex; flex-direction: column; gap: 10px; flex: none; padding: 8px 0; }
+.reminder-options { justify-content: space-between; }
+.reminder-fields { align-items: flex-end; gap: 6px; }
+.reminder-fields label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; color: var(--mist); font-size: 10px; }
+.reminder-fields .tin { padding: 6px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.reminder-fields .pill { padding: 7px 10px; }
+.reminder-error { color: var(--danger); font-size: 11px; }
+.reminder-toggle:focus-visible, .reminder-options button:focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; }
+#todoPicker[hidden], #todoCustomFields[hidden], #todoRemindClear[hidden] { display: none; }
 
 /* ---------- air ---------- */
 .water-pg { gap: 8px; }

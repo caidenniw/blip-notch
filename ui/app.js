@@ -70,6 +70,9 @@
   const todoList = $('#todoList');
   const todoCount = $('#todoCount');
   const todoClear = $('#todoClear');
+  let todoReminderAt = null;
+  let todoPickerOpen = false;
+  let todoCustomOpen = false;
 
   const waterPg = $('.pg[data-p="water"]');
   const wBig = $('#wBig');
@@ -320,6 +323,7 @@
     if (state === 'open') {
       [w, h] = OPEN[page === 'music' && lyricsVisible() ? 'lyrics' : page] || OPEN.chat;
       if (page === 'chat') h = chatHeight();
+      if (page === 'todo') h = todoPickerOpen ? (todoCustomOpen ? 310 : 240) : 204;
     } else if (state === 'answer') {
       w = 460;
       h = answerHeight();
@@ -616,7 +620,7 @@
     const active = document.activeElement;
     if (page === 'chat' && (pending || listening)) return true;
     if (page === 'chat' && active === input && input.value.trim()) return true;
-    if (page === 'todo' && active === todoIn && todoIn.value.trim()) return true;
+    if (page === 'todo' && (todoIn.value.trim() || todoPickerOpen || todoReminderAt)) return true;
     if (page === 'focus' && active === fMin) return true;
     return false;
   }
@@ -1581,13 +1585,71 @@
   }, 1000);
 
   // ---------- to-do ----------
+  const reminderFields = ['todoYear', 'todoMonth', 'todoDay', 'todoHour', 'todoMinute'];
+
+  function renderReminder() {
+    $('#todoRemindLabel').textContent = todoReminderAt ? dueText(todoReminderAt) : t('todo.remind');
+    $('#todoRemind').setAttribute('aria-expanded', String(todoPickerOpen));
+    for (const [id, visible] of [['todoPicker', todoPickerOpen], ['todoCustomFields', todoCustomOpen], ['todoRemindClear', !!todoReminderAt]]) {
+      if (visible) $('#' + id).removeAttribute('hidden'); else $('#' + id).setAttribute('hidden', '');
+    }
+    if (state === 'open' && page === 'todo') applySize();
+  }
+
+  function selectReminder(ms) {
+    todoReminderAt = ms;
+    todoPickerOpen = false;
+    todoCustomOpen = false;
+    $('#todoReminderError').textContent = '';
+    renderReminder();
+  }
+
+  $('#todoRemind').addEventListener('click', () => {
+    todoPickerOpen = !todoPickerOpen;
+    renderReminder();
+  });
+  $('#todoRemindClear').addEventListener('click', () => selectReminder(null));
+  $('#todo15').addEventListener('click', () => selectReminder(Date.now() + 15 * 60000));
+  $('#todo60').addEventListener('click', () => selectReminder(Date.now() + 60 * 60000));
+  $('#todoCustom').addEventListener('click', () => {
+    const d = new Date(todoReminderAt || Date.now() + 3600000);
+    const values = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()];
+    reminderFields.forEach((id, i) => { $('#' + id).value = String(values[i]); });
+    todoCustomOpen = true;
+    renderReminder();
+  });
+  $('#todoSet').addEventListener('click', () => {
+    const raw = reminderFields.map(id => $('#' + id).value.trim());
+    const [y, mo, day, h, m] = raw.map(Number);
+    const d = new Date(y, mo - 1, day, h, m, 0, 0);
+    if (raw.some(v => !v) || ![y, mo, day, h, m].every(Number.isInteger) || y < 2020 || y > 9999 || d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== day || d.getHours() !== h || d.getMinutes() !== m || d.getTime() <= Date.now()) {
+      $('#todoReminderError').textContent = t('todo.invalidTime');
+      return;
+    }
+    selectReminder(d.getTime());
+  });
+  for (const id of reminderFields) $('#' + id).addEventListener('pointerdown', () => invoke('focus_input').catch(() => {}));
+
+  function submitTodo() {
+    if (!todoIn.value.trim()) return;
+    if (todoReminderAt && todoReminderAt <= Date.now()) {
+      todoPickerOpen = true;
+      $('#todoReminderError').textContent = t('todo.invalidTime');
+      renderReminder();
+      return;
+    }
+    addTodo(todoIn.value, todoReminderAt);
+    todoIn.value = '';
+    selectReminder(null);
+    todoIn.focus();
+  }
   function saveTodos() {
     save('blip.todos', todos);
     if (page === 'today') renderToday();
   }
 
-  function addTodo(text) {
-    const parsed = parseTodo(text, Date.now());
+  function addTodo(text, reminderAt) {
+    const parsed = reminderAt === undefined ? parseTodo(text, Date.now()) : { text: text.trim(), dueAt: reminderAt };
     if (!parsed.text) return;
     todos.unshift({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -1604,7 +1666,10 @@
     const d = new Date(ms);
     const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     const today = new Date();
-    return d.toDateString() === today.toDateString() ? hm : t('todo.tomorrow', { t: hm });
+    if (d.toDateString() === today.toDateString()) return t('todo.todayAt', { t: hm });
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    if (d.toDateString() === tomorrow.toDateString()) return t('todo.tomorrowAt', { t: hm });
+    return d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear() + ', ' + hm;
   }
 
   function renderTodoCount() {
@@ -1702,16 +1767,11 @@
   todoIn.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      addTodo(todoIn.value);
-      todoIn.value = '';
+      submitTodo();
     }
   });
   todoIn.addEventListener('pointerdown', () => invoke('focus_input').catch(() => {}));
-  $('#todoAdd').addEventListener('click', () => {
-    addTodo(todoIn.value);
-    todoIn.value = '';
-    todoIn.focus();
-  });
+  $('#todoAdd').addEventListener('click', submitTodo);
   todoClear.addEventListener('click', () => {
     todos = todos.filter(t => !t.done);
     saveTodos();
@@ -2474,7 +2534,7 @@
       fetchLyrics();
     } else if (page === 'focus') renderFocus();
     else if (page === 'today') renderToday();
-    else if (page === 'todo') renderTodos();
+    else if (page === 'todo') { renderReminder(); renderTodos(); }
     else if (page === 'water') renderWater();
     else if (page === 'shelf') renderShelf();
     else if (page === 'chat' && !pending) renderHistory();

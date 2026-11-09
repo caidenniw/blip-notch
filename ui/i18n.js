@@ -20,8 +20,11 @@ const STR = {
     'focus.resume': 'Resume', 'focus.reset': 'Reset', 'focus.skip': 'Skip',
     'focus.timeBreak': 'time for a break', 'focus.timeFocus': 'time to focus',
 
-    'todo.count': '{done} done today · {left} left', 'todo.clear': 'Clear done', 'todo.placeholder': 'New task… (@14:30)',
-    'todo.add': 'Add', 'todo.empty': 'Jot down small things. Add a time with @14:30 — Blip reminds you in the notch when it’s due.',
+    'todo.count': '{done} done today · {left} left', 'todo.clear': 'Clear done', 'todo.placeholder': 'New task…',
+    'todo.add': 'Add', 'todo.empty': 'Nothing here yet. What would you like to get done?',
+    'todo.remind': 'Remind me', 'todo.removeReminder': 'Remove reminder', 'todo.in15': 'In 15 minutes', 'todo.in60': 'In 1 hour',
+    'todo.chooseTime': 'Choose date & time', 'todo.day': 'Day', 'todo.month': 'Month', 'todo.year': 'Year', 'todo.hour': 'Hour', 'todo.minute': 'Min',
+    'todo.setReminder': 'Set', 'todo.invalidTime': 'Choose a valid date and a future time.', 'todo.todayAt': 'Today, {t}', 'todo.tomorrowAt': 'Tomorrow, {t}',
     'todo.markOpen': 'Mark not done', 'todo.markDone': 'Mark done', 'todo.editHint': '{text} (double-click to edit)',
     'todo.delete': 'Delete', 'todo.tomorrow': 'tomorrow {t}', 'todo.allDone': 'all done',
 
@@ -126,8 +129,11 @@ const STR = {
     'focus.resume': 'Lanjut', 'focus.reset': 'Reset', 'focus.skip': 'Lewati',
     'focus.timeBreak': 'waktunya istirahat', 'focus.timeFocus': 'waktunya fokus',
 
-    'todo.count': '{done} selesai hari ini · {left} tersisa', 'todo.clear': 'Hapus selesai', 'todo.placeholder': 'Tugas baru… (@14:30)',
-    'todo.add': 'Tambah', 'todo.empty': 'Catat hal kecil. Tambah jam dengan @14:30 — Blip mengingatkan di notch saat waktunya.',
+    'todo.count': '{done} selesai hari ini · {left} tersisa', 'todo.clear': 'Hapus selesai', 'todo.placeholder': 'Tambah tugas…',
+    'todo.add': 'Tambah', 'todo.empty': 'Belum ada tugas. Apa yang ingin kamu selesaikan?',
+    'todo.remind': 'Ingatkan', 'todo.removeReminder': 'Hapus pengingat', 'todo.in15': '15 menit lagi', 'todo.in60': '1 jam lagi',
+    'todo.chooseTime': 'Pilih tanggal & jam', 'todo.day': 'Tanggal', 'todo.month': 'Bulan', 'todo.year': 'Tahun', 'todo.hour': 'Jam', 'todo.minute': 'Menit',
+    'todo.setReminder': 'Pasang', 'todo.invalidTime': 'Pilih tanggal yang valid dan waktu yang belum lewat.', 'todo.todayAt': 'Hari ini, {t}', 'todo.tomorrowAt': 'Besok, {t}',
     'todo.markOpen': 'Tandai belum', 'todo.markDone': 'Tandai selesai', 'todo.editHint': '{text} (klik dua kali untuk edit)',
     'todo.delete': 'Hapus', 'todo.tomorrow': 'besok {t}', 'todo.allDone': 'semua selesai',
 

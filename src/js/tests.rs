@@ -58,6 +58,46 @@ fn run(e: &crate::engine::Engine, until: f64) {
 }
 
 #[test]
+fn task_reminders_select_remove_and_reject_past() {
+    let e = boot(r#"
+setTimeout(() => { document.querySelector('#todoIn').value = 'Review @work'; document.body.setAttribute('data-probe', String(Date.now() + 15 * 60000)); __click('#todo15'); __click('#todoAdd'); }, 100);
+setTimeout(() => { document.querySelector('#todoIn').value = 'No reminder'; __click('#todo60'); __click('#todoRemindClear'); __click('#todoAdd'); }, 200);
+setTimeout(() => { __click('#todoRemind'); __click('#todoCustom'); document.querySelector('#todoYear').value = '2026'; document.querySelector('#todoMonth').value = '10'; document.querySelector('#todoDay').value = '24'; document.querySelector('#todoHour').value = '8'; document.querySelector('#todoMinute').value = '0'; __click('#todoSet'); }, 300);
+"#);
+    run(&e, 500.0);
+    let p = e.page.borrow();
+    let tasks: serde_json::Value = serde_json::from_str(&p.storage.get("blip.todos").unwrap()).unwrap();
+    assert_eq!(tasks[0]["text"], "No reminder");
+    assert!(tasks[0]["dueAt"].is_null());
+    assert_eq!(tasks[1]["text"], "Review @work");
+    assert_eq!(tasks[1]["dueAt"].as_i64().unwrap(), probe(&e).parse::<i64>().unwrap());
+    let d = &p.dom;
+    assert_eq!(d.text_content(d.by_id("todoReminderError").unwrap()), "Choose a valid date and a future time.");
+    assert!(d.attr(d.by_id("todoPicker").unwrap(), "hidden").is_none());
+}
+
+#[test]
+fn task_custom_reminder_keeps_explicit_date() {
+    let e = boot(r#"
+setTimeout(() => {
+  __click('#todoRemind'); __click('#todoCustom');
+  for (const [id, value] of [['todoYear','2027'],['todoMonth','2'],['todoDay','30'],['todoHour','14'],['todoMinute','30']]) document.querySelector('#' + id).value = value;
+  __click('#todoSet');
+  document.body.setAttribute('data-probe', document.querySelector('#todoRemind').getAttribute('aria-expanded'));
+  document.querySelector('#todoDay').value = '28'; __click('#todoSet');
+  document.querySelector('#todoIn').value = 'Appointment'; __click('#todoAdd');
+}, 100);
+"#);
+    run(&e, 300.0);
+    assert_eq!(probe(&e), "true");
+    let p = e.page.borrow();
+    let tasks: serde_json::Value = serde_json::from_str(&p.storage.get("blip.todos").unwrap()).unwrap();
+    let expected = boot("setTimeout(() => document.body.setAttribute('data-probe', String(new Date(2027, 1, 28, 14, 30).getTime())), 100);");
+    run(&expected, 200.0);
+    assert_eq!(tasks[0]["dueAt"].as_i64().unwrap(), probe(&expected).parse::<i64>().unwrap());
+}
+
+#[test]
 fn settings_page_toggle_commits_once() {
     let e = boot_settings(r#"
 setTimeout(() => __emit('prefs', { pagesOff: [] }), 100);

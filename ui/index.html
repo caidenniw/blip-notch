@@ -110,7 +110,15 @@
               <span id="todoCount"></span>
               <button class="link" id="todoClear" data-i18n="todo.clear">Clear done</button>
             </div>
-            <div class="tadd"><input class="tin" id="todoIn" placeholder="New task… (@14:30)" data-i18n-ph="todo.placeholder" /><button class="pill" id="todoAdd" data-i18n="todo.add">Add</button></div>
+            <div class="tadd"><input class="tin" id="todoIn" placeholder="New task…" data-i18n-ph="todo.placeholder" /><button class="pill" id="todoAdd" data-i18n="todo.add">Add</button></div>
+            <div class="reminder-row"><button class="link reminder-toggle" id="todoRemind" aria-expanded="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><span id="todoRemindLabel" data-i18n="todo.remind">Remind me</span></button><button class="link" id="todoRemindClear" hidden data-i18n="todo.removeReminder">Remove reminder</button></div>
+            <div class="reminder-picker" id="todoPicker" hidden>
+              <div class="reminder-options"><button class="link" id="todo15" data-i18n="todo.in15">In 15 minutes</button><button class="link" id="todo60" data-i18n="todo.in60">In 1 hour</button><button class="link" id="todoCustom" data-i18n="todo.chooseTime">Choose date & time</button></div>
+              <div id="todoCustomFields" hidden>
+                <div class="reminder-fields"><label><span data-i18n="todo.day">Day</span><input class="tin" id="todoDay" type="number" min="1" max="31" /></label><label><span data-i18n="todo.month">Month</span><input class="tin" id="todoMonth" type="number" min="1" max="12" /></label><label><span data-i18n="todo.year">Year</span><input class="tin" id="todoYear" type="number" min="2020" max="9999" /></label><label><span data-i18n="todo.hour">Hour</span><input class="tin" id="todoHour" type="number" min="0" max="23" /></label><label><span data-i18n="todo.minute">Minute</span><input class="tin" id="todoMinute" type="number" min="0" max="59" /></label><button class="pill" id="todoSet" data-i18n="todo.setReminder">Set</button></div>
+              </div>
+              <span class="reminder-error" id="todoReminderError" role="alert"></span>
+            </div>
             <div class="tlist scroll" id="todoList"></div>
           </section>
 

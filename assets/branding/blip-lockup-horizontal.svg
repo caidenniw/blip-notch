@@ -1,22 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 634 256" width="634" height="256" role="img" aria-labelledby="title-lockup">
-  <title id="title-lockup">Blip Logo</title>
-  <defs>
-    <linearGradient id="eye-cyan-lockup" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#70d6ff"/>
-      <stop offset="100%" stop-color="#00b4d8"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Symbol on Left -->
-  <g id="symbol">
-    <!-- Island capsule -->
-    <rect x="36" y="68" width="184" height="120" rx="60" fill="#111116"/>
-    <!-- Glowing cyan twin eyes -->
-    <rect x="88" y="104" width="24" height="48" rx="12" fill="url(#eye-cyan-lockup)"/>
-    <rect x="144" y="104" width="24" height="48" rx="12" fill="url(#eye-cyan-lockup)"/>
-  </g>
-
-  <!-- Geometric Wordmark 'blip' on Right -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 634 256" width="634" height="256" role="img"><title>Blip</title><path fill="#111116" fill-rule="evenodd" d="M48 32H96V88H152C191.76 88 224 120.24 224 160C224 199.76 191.76 232 152 232H96C69.49 232 48 210.51 48 184ZM112 128C103.16 128 96 135.16 96 144V176C96 184.84 103.16 192 112 192C120.84 192 128 184.84 128 176V144C128 135.16 120.84 128 112 128ZM168 128C159.16 128 152 135.16 152 144V176C152 184.84 159.16 192 168 192C176.84 192 184 184.84 184 176V144C184 135.16 176.84 128 168 128Z"/>
   <g id="wordmark" fill="#111116">
     <!-- b -->
     <path fill-rule="evenodd" d="
@@ -43,7 +25,7 @@
 
     <!-- i -->
     <rect x="442" y="82" width="20" height="100" rx="10"/>
-    <circle cx="452" cy="54" r="10" fill="url(#eye-cyan-lockup)"/>
+    <circle cx="452" cy="54" r="10" fill="#111116"/>
 
     <!-- p -->
     <path fill-rule="evenodd" d="

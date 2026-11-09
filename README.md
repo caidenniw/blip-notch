@@ -36,7 +36,7 @@ Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out th
 
 ## Install
 
-1. Download `Blip_0.3.0_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
+1. Download `Blip_0.3.1_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
 2. The installer is unsigned: SmartScreen shows a warning. Click "More info" -> "Run anyway".
 3. Run Blip once. It creates `%APPDATA%\Blip\blip.config.json`.
 4. Open Settings (gear in the notch header or tray), enter the endpoint, API key and model ID under AI, then Connect. Settings are saved only when the main model answers successfully.
@@ -104,7 +104,13 @@ Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Pengaturan… 
 
 Settings window (600×540, gear icon in the header): AI endpoint/key/models with a live model test, voice input and output, notch behaviour, page visibility, focus and water targets, autostart, hotkey, dictate key, motion and animation speed. Hotkey choices: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` stays fixed. Changes to `blip.config.json` apply immediately; island prefs (hover, close delay, hidden pages, nudge, focus/water numbers) live in `localstorage.json`.
 
+Version 0.3.1 introduces the **Awake b** application icon: a monochrome letterform on a warm light tile, without blue eyes, gradients or glow. Windows executable, tray, shortcuts and installer share the new icon. Tasks now offer explicit reminder controls described below. Existing config and task storage remain in place during upgrades.
+
+Known limitations: this is a branding and Tasks UX release, not a security-hardening release. The loopback control API has no caller authentication; dictation may paste into the current foreground app; corrupt local storage recovery and concurrent Settings saves need hardening. Avoid dictating sensitive text or exposing the control port to other hosts.
+
 Version 0.3.0 adds instant English/Indonesian switching, connection checks for main and backup AI models, and reorganized Settings: General, AI, Voice, Notch, Pages, Focus & Water. Page switches apply immediately; hidden pages also disappear from Today. Fixed native delegated clicks firing twice, which previously reverted switches immediately.
+
+Tasks: write a task, optionally choose **Remind me** → **In 15 minutes**, **In 1 hour**, or **Choose date & time**, then Add. The selected reminder shows its date/time and can be removed without deleting the draft. Invalid dates and past times are rejected; task text does not require reminder syntax.
 
 Local commands (voice or text, no LLM, up to 7 words; Indonesian): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute`, `volume 50`, `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <title> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <text> [@14:30]`.
 

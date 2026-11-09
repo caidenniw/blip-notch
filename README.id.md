@@ -26,7 +26,7 @@ Host native Rust: QuickJS menjalankan JavaScript UI asli, taffy menghitung layou
 
 ## Instal
 
-1. Unduh `Blip_0.3.0_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
+1. Unduh `Blip_0.3.1_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
 2. Installer belum ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 3. Jalankan Blip sekali. Aplikasi membuat `%APPDATA%\Blip\blip.config.json`.
 4. Buka Pengaturan (ikon gear di header notch atau tray), isi endpoint, API key dan model di bagian AI, lalu Hubungkan. Konfigurasi disimpan hanya setelah model utama berhasil menjawab.
@@ -109,7 +109,13 @@ Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
 
 Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
 
+Versi 0.3.1 memakai ikon aplikasi **Awake b**: bentuk huruf monokrom pada tile terang hangat, tanpa mata biru, gradasi atau glow. Executable Windows, tray, shortcut dan installer memakai ikon baru. Tugas kini memakai kontrol pengingat eksplisit seperti penjelasan berikut. Upgrade tetap mempertahankan lokasi konfigurasi dan data tugas.
+
+Batasan yang diketahui: ini rilis branding dan UX Tugas, bukan rilis perbaikan keamanan. API kontrol loopback belum mengautentikasi pemanggil; dikte dapat menempelkan teks ke aplikasi foreground saat hasil selesai; recovery storage rusak dan penyimpanan Pengaturan bersamaan masih perlu diperkuat. Hindari dikte sensitif dan jangan membuka port kontrol ke host lain.
+
 Versi 0.3.0 menambahkan pergantian bahasa Inggris/Indonesia langsung, pemeriksaan model AI utama dan cadangan, serta menu Umum, AI, Suara, Notch, Halaman, Fokus & Air. Sakelar halaman langsung berlaku termasuk baris Hari ini. Klik native yang sebelumnya memanggil handler dua kali dan membatalkan perubahan sakelar sudah diperbaiki.
+
+Tugas: tulis tugas, opsional pilih **Ingatkan** → **15 menit lagi**, **1 jam lagi**, atau **Pilih tanggal & jam**, lalu Tambah. Waktu pengingat tampil jelas dan bisa dihapus tanpa menghapus draf. Tanggal tidak valid dan waktu lewat ditolak; teks tugas tidak memerlukan sintaks pengingat.
 
 Perintah lokal (suara atau teks, tanpa LLM, maks 7 kata): `lagu berikutnya`/`skip`, `lagu sebelumnya`, `pause`, `lanjutkan musik`, `volume naik|turun|mute` (`banget` = 20%), `volume 50` (0-100), `buka spotify|youtube|youtube music|whatsapp|gmail|github|chatgpt`, `putar <judul> di youtube|spotify`, `timer 5 menit`, `minum`, `mulai fokus`/`stop fokus`, `tambah tugas <teks> [@14:30]`.
 
