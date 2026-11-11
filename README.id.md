@@ -26,7 +26,7 @@ Host native Rust: QuickJS menjalankan JavaScript UI asli, taffy menghitung layou
 
 ## Instal
 
-1. Unduh `Blip_0.3.1_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
+1. Unduh `Blip_0.3.2_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
 2. Installer belum ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 3. Jalankan Blip sekali. Aplikasi membuat `%APPDATA%\Blip\blip.config.json`.
 4. Buka Pengaturan (ikon gear di header notch atau tray), isi endpoint, API key dan model di bagian AI, lalu Hubungkan. Konfigurasi disimpan hanya setelah model utama berhasil menjawab.
@@ -101,6 +101,7 @@ Obrolan teks jalan tanpa bagian ini.
 | Ingatan | `ingat <fakta>`, `apa yang kamu ingat`, `lupakan semua` (tersimpan lokal, disuntik ke system prompt) |
 | Hover (default) | buka halaman Hari ini bila panel terakhir dibuka > 30 mnt lalu |
 | HUD | volume, Caps Lock, charger/baterai, bahasa keyboard, status internet, perangkat audio |
+| Idle | mata kecil netral, jam HH:mm 24 jam menetap, ikon dan persentase baterai bila tersedia; charging diprioritaskan, baterai rendah merah hanya tanpa charging; mata hanya berkedip sesekali dan mengikuti reduced motion |
 | Full-screen | notch otomatis bersembunyi saat aplikasi atau game layar penuh berjalan |
 | `Ctrl+Alt+B` (bisa diganti di Pengaturan → Umum) | sama dengan tap tombol Copilot |
 | `Ctrl+Alt+Q` | keluar |
@@ -109,9 +110,9 @@ Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
 
 Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
 
-Versi 0.3.1 memakai ikon aplikasi **Awake b**: bentuk huruf monokrom pada tile terang hangat, tanpa mata biru, gradasi atau glow. Executable Windows, tray, shortcut dan installer memakai ikon baru. Tugas kini memakai kontrol pengingat eksplisit seperti penjelasan berikut. Upgrade tetap mempertahankan lokasi konfigurasi dan data tugas.
+Versi 0.3.2 mempertahankan status idle dalam satu baris: mata kecil netral, jam HH:mm 24 jam menetap, serta ikon dan persentase baterai dibulatkan bila tersedia. Charging diprioritaskan termasuk pada 0%; baterai tanpa charging pada 20% atau kurang berwarna merah; baterai tidak tersedia menyembunyikan grupnya. Pill tetap 192×32 dan compact sliver tidak berubah. Mata hanya berkedip sesekali tanpa glow, mengikuti kursor, mood acak atau transisi tidur. Musik dan lirik tidak berubah. Ikon **Awake b** dan kontrol pengingat Tugas dari 0.3.1 tetap dipertahankan; upgrade menjaga konfigurasi dan data tugas.
 
-Batasan yang diketahui: ini rilis branding dan UX Tugas, bukan rilis perbaikan keamanan. API kontrol loopback belum mengautentikasi pemanggil; dikte dapat menempelkan teks ke aplikasi foreground saat hasil selesai; recovery storage rusak dan penyimpanan Pengaturan bersamaan masih perlu diperkuat. Hindari dikte sensitif dan jangan membuka port kontrol ke host lain.
+Batasan yang diketahui: rilis tampilan idle ini tidak memperbaiki batasan keamanan existing. API kontrol loopback belum mengautentikasi pemanggil; dikte dapat menempelkan teks ke aplikasi foreground saat hasil selesai; recovery storage rusak dan penyimpanan Pengaturan bersamaan masih perlu diperkuat. Hindari dikte sensitif dan jangan membuka port kontrol ke host lain.
 
 Versi 0.3.0 menambahkan pergantian bahasa Inggris/Indonesia langsung, pemeriksaan model AI utama dan cadangan, serta menu Umum, AI, Suara, Notch, Halaman, Fokus & Air. Sakelar halaman langsung berlaku termasuk baris Hari ini. Klik native yang sebelumnya memanggil handler dua kali dan membatalkan perubahan sakelar sudah diperbaiki.
 

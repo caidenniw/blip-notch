@@ -100,7 +100,6 @@ body[data-state="voice"] .ambient { opacity: .3; }
 body[data-state="voice"][data-mood="listen"] .ambient { opacity: .6; animation: breathe 1.6s ease-in-out infinite alternate; }
 body[data-state="alert"] .ambient { opacity: .55; background: linear-gradient(90deg, #ff5a6e, #ff3a3a, #ff6b5f); }
 body[data-state="alert"][data-tone="ok"] .ambient { background: var(--glow); }
-body.sleepy .ambient { opacity: 0; }
 body[data-page="focus"].focusing .ambient { background: linear-gradient(90deg, #ff5a6e, #ff3a3a, #ff6b5f); opacity: .18; }
 body[data-state="open"][data-page="music"].has-art .ambient {
   background: linear-gradient(90deg, var(--art), transparent 70%);
@@ -145,7 +144,7 @@ body.compact[data-state="idle"] .ambient, body.compact[data-state="live"] .ambie
   padding: 0 20px;
   overflow: hidden;
 }
-body[data-state="idle"] .row { justify-content: center; padding: 0; }
+body[data-state="idle"] .row { justify-content: center; gap: 10px; padding: 0 14px; }
 body[data-state="answer"] .row { padding: 0 20px; }
 
 /* ---------- mata ---------- */
@@ -170,10 +169,6 @@ body[data-state="listening"] .eye { background: #8ce4ff; }
 body[data-state="alert"]:not([data-tone="ok"]) .eye { background: #ff8f8f; box-shadow: 0 0 4px 1px rgba(255,120,120,.45), 0 0 10px 2px rgba(255,80,80,.2); }
 body[data-state="alert"][data-tone="ok"] .eyes { animation: okFlash .55s ease; }
 @keyframes okFlash { 50% { filter: drop-shadow(0 0 5px var(--ok)); } }
-body.sleepy .eyes { --eye-expression: scaleY(.42); }
-body.sleepy .eye { transition: transform 1.2s ease; }
-body.wake .eye { animation: wake .6s var(--spring); }
-@keyframes wake { 0% { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.42); } 55% { transform: scaleY(1.15); } 100% { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(1); } }
 body.talking .eye { animation: talk .22s ease-in-out infinite alternate; }
 @keyframes talk { to { transform: translate(var(--pupil-x), var(--pupil-y)) scaleY(.6); } }
 .eye.blink { animation: blink 140ms ease; }
@@ -190,14 +185,19 @@ body[data-mood="confused"] #mascot .eye:last-child, body[data-mood="confused"] #
 body[data-mood="look-l"] #mascot { --eye-expression: translateX(-3px); }
 body[data-mood="look-r"] #mascot { --eye-expression: translateX(3px); }
 
-/* idle: clock first, then the eyes wake up, then they doze */
-.idle-clock { display: none; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+/* Idle status stays visible; only the eyes blink. */
+body[data-state="idle"] #mascot { gap: 5px; flex: 0 0 17px; }
+body[data-state="idle"] #mascot .eye { width: 6px; height: 9px; background: #fff; box-shadow: none; }
+.idle-clock { display: none; align-items: baseline; font-variant-numeric: tabular-nums; }
 .idle-clock b { font-size: 13px; font-weight: 600; color: #fff; }
-.idle-clock span { font-size: 11px; color: rgba(236, 239, 247, .78); }
 body[data-state="idle"] .idle-clock { display: flex; animation: fadeIn .4s ease; }
-body[data-state="idle"]:not(.eyesmode) .eyes { display: none; }
-body[data-state="idle"].eyesmode .idle-clock { display: none; }
-body[data-state="idle"].eyesmode .eyes { animation: fadeIn .4s ease; }
+.idle-battery { display: none; align-items: center; gap: 4px; color: var(--mist); }
+body[data-state="idle"] .idle-battery { display: flex; }
+#idleBattery[hidden] { display: none; }
+.idle-battery svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.idle-battery span { font-size: 11px; font-variant-numeric: tabular-nums; }
+.idle-battery.charge { color: var(--ok); }
+.idle-battery.low { color: var(--danger); }
 @keyframes fadeIn { from { opacity: 0; } }
 
 .eyes.mini { gap: 6px; flex: 0 0 22px; }

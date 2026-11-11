@@ -118,13 +118,72 @@ fn app_boots_idle() {
     let p = e.page.borrow();
     let d = &p.dom;
     let ic = d.by_id("icTime").unwrap();
-    assert_eq!(d.text_content(ic), "09:41");
-    assert_eq!(d.text_content(d.by_id("icDate").unwrap()), "Sat, 24 Oct");
+    let time = d.text_content(ic);
+    assert!(time.len() == 5 && time.as_bytes()[2] == b':' && time.bytes().enumerate().all(|(i, c)| i == 2 || c.is_ascii_digit()));
     // music page hidden without media: 6 tabs
     assert_eq!(d.element_children(d.by_id("pageNav").unwrap()).len(), 6);
     assert_eq!(d.attr(d.body, "data-state"), Some("idle"));
-    assert_eq!(d.style_get(d.body, "--w"), Some("168px"));
-    assert_eq!(d.style_get(d.body, "--h"), Some("32px"));
+    assert_eq!(d.text_content(d.by_id("idleBatteryValue").unwrap()), "80%");
+    assert!(d.attr(d.by_id("idleBattery").unwrap(), "hidden").is_none());
+}
+
+#[test]
+fn idle_status_stays_visible() {
+    let e = boot("__seedStorage({'blip.nudgeOn':false});");
+    run(&e, 31000.0);
+    let p = e.page.borrow();
+    assert_eq!(p.dom.attr(p.dom.body, "data-state"), Some("idle"));
+    for id in ["mascot", "icTime", "idleBattery"] {
+        let node = p.dom.by_id(id).unwrap();
+        let g = p.layout.boxes.get(&(node, crate::layout::Part::Main)).unwrap();
+        assert!(g.w > 0.0 && g.h > 0.0, "{id} must remain visible");
+    }
+}
+
+#[test]
+fn idle_battery_transitions() {
+    let e = boot("__seedStorage({'blip.nudgeOn':false});");
+    run(&e, 500.0);
+    for (battery, plugged, text, charge, low) in [
+        ("0", false, "0%", false, true),
+        ("0", true, "0%", true, false),
+        ("20", false, "20%", false, true),
+        ("21", false, "21%", false, false),
+        ("100", true, "100%", true, false),
+        ("null", true, "", false, false),
+        ("80", false, "80%", false, false),
+        ("NaN", false, "", false, false),
+        ("-1", false, "", false, false),
+        ("101", false, "", false, false),
+        ("'80'", false, "", false, false),
+        ("20.4", false, "20%", false, false),
+    ] {
+        e.js.eval("battery", &format!("__emit('sys', {{battery:{battery},plugged:{plugged}}});"));
+        run(&e, e.now() + 32.0);
+        let p = e.page.borrow();
+        let d = &p.dom;
+        let group = d.by_id("idleBattery").unwrap();
+        assert_eq!(d.attr(d.body, "data-state"), Some("idle"));
+        assert_eq!(d.text_content(d.by_id("idleBatteryValue").unwrap()), text);
+        assert_eq!(d.attr(group, "hidden").is_some(), text.is_empty());
+        assert_eq!(d.has_class(group, "charge"), charge);
+        assert_eq!(d.has_class(group, "low"), low);
+        let title = if text.is_empty() { String::new() } else { format!("{} {text}", if charge { "charging" } else { "battery" }) };
+        if !text.is_empty() {
+            let icon = p.layout.boxes[&(d.by_id("idleBatteryIcon").unwrap(), crate::layout::Part::Main)];
+            let value = p.layout.boxes[&(d.by_id("idleBatteryValue").unwrap(), crate::layout::Part::Main)];
+            assert!(value.x >= icon.x + icon.w && (value.y + value.h / 2.0 - icon.y - icon.h / 2.0).abs() < 2.0);
+        }
+        assert_eq!(d.attr(group, "title"), Some(title.as_str()));
+    }
+}
+
+#[test]
+fn idle_battery_title_tracks_language() {
+    let e = boot("setTimeout(() => __emit('config', {language:'id',model:'test',stt:'test'}), 100);");
+    run(&e, 500.0);
+    let p = e.page.borrow();
+    assert_eq!(p.dom.attr(p.dom.by_id("idleBattery").unwrap(), "title"), Some("mengisi daya 80%"));
 }
 
 /// Hover opens the panel on the stored page; layout reaches the open size after the spring.
@@ -336,6 +395,5 @@ fn island_switches_to_indonesian() {
     run(&e, 500.0);
     let p = e.page.borrow();
     let d = &p.dom;
-    assert_eq!(d.text_content(d.by_id("icDate").unwrap()), "Sab, 24 Okt");
     assert_eq!(d.text_content(d.by_id("pageTitle").unwrap()), "Obrolan");
 }

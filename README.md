@@ -32,11 +32,12 @@ Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out th
 - Proactive nudges (greeting, afternoon tasks, late night, low battery), at most one per 10 minutes, idle only, silent
 - Drag-and-drop file shelf
 - System HUD: volume, Caps Lock, charger/battery, keyboard language, connectivity, audio device
+- Idle: small neutral eyes, persistent 24-hour HH:mm clock, battery icon and percentage when available. Charging takes priority over low-battery color; unavailable battery hides its group. Eyes only blink occasionally; reduced-motion settings remain respected.
 - Auto-hides while a full-screen app or game runs
 
 ## Install
 
-1. Download `Blip_0.3.1_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
+1. Download `Blip_0.3.2_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
 2. The installer is unsigned: SmartScreen shows a warning. Click "More info" -> "Run anyway".
 3. Run Blip once. It creates `%APPDATA%\Blip\blip.config.json`.
 4. Open Settings (gear in the notch header or tray), enter the endpoint, API key and model ID under AI, then Connect. Settings are saved only when the main model answers successfully.
@@ -104,9 +105,9 @@ Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Pengaturan… 
 
 Settings window (600×540, gear icon in the header): AI endpoint/key/models with a live model test, voice input and output, notch behaviour, page visibility, focus and water targets, autostart, hotkey, dictate key, motion and animation speed. Hotkey choices: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` stays fixed. Changes to `blip.config.json` apply immediately; island prefs (hover, close delay, hidden pages, nudge, focus/water numbers) live in `localstorage.json`.
 
-Version 0.3.1 introduces the **Awake b** application icon: a monochrome letterform on a warm light tile, without blue eyes, gradients or glow. Windows executable, tray, shortcuts and installer share the new icon. Tasks now offer explicit reminder controls described below. Existing config and task storage remain in place during upgrades.
+Version 0.3.2 keeps idle status in one stable row: small neutral eyes, a persistent 24-hour HH:mm clock, and battery icon with rounded percentage when available. Charging takes priority even at 0%; unplugged battery at 20% or below is red; unavailable battery hides its group. The pill stays 192×32, with the existing compact sliver unchanged. Eyes blink occasionally without glow, cursor-following, random moods or sleep transitions. Music and lyrics are unchanged. The **Awake b** icon and explicit Tasks reminder controls from 0.3.1 remain; upgrades preserve config and task storage.
 
-Known limitations: this is a branding and Tasks UX release, not a security-hardening release. The loopback control API has no caller authentication; dictation may paste into the current foreground app; corrupt local storage recovery and concurrent Settings saves need hardening. Avoid dictating sensitive text or exposing the control port to other hosts.
+Known limitations: this idle-display release does not address existing security limitations. The loopback control API has no caller authentication; dictation may paste into the current foreground app; corrupt local storage recovery and concurrent Settings saves need hardening. Avoid dictating sensitive text or exposing the control port to other hosts.
 
 Version 0.3.0 adds instant English/Indonesian switching, connection checks for main and backup AI models, and reorganized Settings: General, AI, Voice, Notch, Pages, Focus & Water. Page switches apply immediately; hidden pages also disappear from Today. Fixed native delegated clicks firing twice, which previously reverted switches immediately.
 

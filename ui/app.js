@@ -34,8 +34,10 @@
   const pageNav = $('#pageNav');
   const clockEl = $('#clock');
   const icTime = $('#icTime');
-  const icDate = $('#icDate');
   const battEl = $('#batt');
+  const idleBattery = $('#idleBattery');
+  const idleBatteryIcon = $('#idleBatteryIcon');
+  const idleBatteryValue = $('#idleBatteryValue');
   const pinBtn = $('#pinBtn');
   const liveRing = $('#liveRing');
   const island = $('#island');
@@ -111,7 +113,7 @@
   };
 
   const SIZES = {
-    idle: [168, 32],
+    idle: [192, 32],
     live: [260, 34],
     liveLyr: [320, 34],
     hud: [300, 36],
@@ -212,14 +214,11 @@
   let ttsEnabled = true;
   let moodTimer = 0;
   let lvT = 0;
-  let sleepTimer = 0;
-  let eyesTimer = 0;
   let focusOnOpen = false;
   let pageSwipe = null;
   let pageChangedAt = 0;
   let hudKind = '';
   let hudDrag = false;
-  let gazeRaf = 0;
 
   document.addEventListener('pointerdown', ev => {
     if (!ev.target.closest('.more, .more-menu')) {
@@ -291,14 +290,6 @@
     if (state === 'answer' && e.target === island && e.propertyName === 'height') applySize();
   });
 
-  function armSleep() {
-    clearTimeout(sleepTimer);
-    clearTimeout(eyesTimer);
-    body.classList.remove('sleepy', 'eyesmode');
-    if (state !== 'idle') return;
-    eyesTimer = setTimeout(() => body.classList.add('eyesmode'), 8000);
-    sleepTimer = setTimeout(() => body.classList.add('sleepy'), 28000);
-  }
 
   function chatHeight() {
     const els = messages.children;
@@ -356,7 +347,6 @@
     if (next !== 'alert') delete body.dataset.tone;
     if (next === 'idle') mascot.style.transform = '';
     else { mascot.style.removeProperty('--pupil-x'); mascot.style.removeProperty('--pupil-y'); }
-    armSleep();
 
     if (next === 'open') {
       renderPage();
@@ -653,11 +643,6 @@
     if (hover) {
       needClose = false;
       clearTimeout(leaveTimer);
-      if (body.classList.contains('sleepy')) {
-        body.classList.remove('sleepy');
-        body.classList.add('wake');
-        setTimeout(() => body.classList.remove('wake'), 600);
-      }
       if (state === 'hud' && (hudKind === 'volume' || hudKind === 'brightness')) {
         clearTimeout(hudTimer);
       } else if (['idle', 'live', 'hud', 'answer', 'alert', 'thinking'].includes(state)) {
@@ -686,11 +671,11 @@
 
   let lastGaze = '';
   listen('cursor', e => {
-    if (state === 'open' || state === 'hud' || state === 'voice') return;
+    if (state === 'idle' || state === 'open' || state === 'hud' || state === 'voice') return;
     const r = mascot.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    const lim = state === 'idle' ? 2 : 3;
+    const lim = 3;
     const half = v => Math.round(v * 2) / 2;
     const dx = half(Math.max(-lim, Math.min(lim, (e.payload.x - cx) / 14)));
     const dy = half(Math.max(-lim, Math.min(lim, (e.payload.y - cy) / 14)));
@@ -2262,9 +2247,15 @@
   listen('hud', e => showHud(e.payload));
 
   function setBatt(battery, plugged) {
-    batteryNow = battery;
-    pluggedNow = !!battery && !!plugged;
-    if (battery == null) {
+    batteryNow = typeof battery === 'number' && Number.isFinite(battery) && battery >= 0 && battery <= 100 ? battery : null;
+    pluggedNow = batteryNow !== null && !!plugged;
+    idleBattery.hidden = batteryNow === null;
+    idleBatteryValue.textContent = batteryNow === null ? '' : Math.round(batteryNow) + '%';
+    idleBatteryIcon.innerHTML = batteryNow === null ? '' : HUD_ICONS[pluggedNow ? 'power' : 'battery'];
+    idleBattery.classList.toggle('charge', pluggedNow);
+    idleBattery.classList.toggle('low', batteryNow !== null && !pluggedNow && batteryNow <= 20);
+    idleBattery.title = batteryNow === null ? '' : t(pluggedNow ? 'batt.charging' : 'batt.battery') + ' ' + idleBatteryValue.textContent;
+    if (batteryNow === null) {
       battEl.style.display = 'none';
       battEl.textContent = '';
       return;
@@ -2272,7 +2263,7 @@
     battEl.style.display = 'inline';
     battEl.textContent = battery + '%';
     battEl.classList.toggle('plug', !!plugged);
-    battEl.title = t(plugged ? 'batt.charging' : 'batt.battery');
+    battEl.title = t(pluggedNow ? 'batt.charging' : 'batt.battery');
   }
 
   listen('sys', e => setBatt(e.payload.battery, e.payload.plugged));
@@ -2428,14 +2419,12 @@
     clockEl.textContent = hm;
     tdTime.textContent = hm;
     icTime.textContent = hm;
-    icDate.textContent = fmtDate(d);
   }
   tickClock();
   setInterval(tickClock, 15000);
 
   // ---------- blink ----------
   function blinkEyes(root = mascot) {
-    if (body.classList.contains('sleepy')) return;
     for (const eye of root.querySelectorAll('.eye')) {
       eye.classList.add('blink');
       setTimeout(() => eye.classList.remove('blink'), 140);
@@ -2443,42 +2432,18 @@
   }
   (function blink() {
     setTimeout(() => {
-      blinkEyes();
+      if (!compact && ['idle', 'live', 'answer', 'alert', 'listening', 'thinking'].includes(state)) blinkEyes();
       if (state === 'open') blinkEyes($('#miniEyes'));
       blink();
     }, 3000 + Math.random() * 3000);
   })();
 
-  island.addEventListener('pointermove', ev => {
-    if (state !== 'idle' || !body.classList.contains('eyesmode') || gazeRaf) return;
-    gazeRaf = requestAnimationFrame(() => {
-      gazeRaf = 0;
-      const rect = island.getBoundingClientRect();
-      const x = Math.max(-1.5, Math.min(1.5, (ev.clientX - rect.left - rect.width / 2) / Math.max(rect.width, 1) * 3));
-      const y = Math.max(-1.5, Math.min(1.5, (ev.clientY - rect.top - rect.height / 2) / Math.max(rect.height, 1) * 3));
-      mascot.style.setProperty('--pupil-x', x + 'px');
-      mascot.style.setProperty('--pupil-y', y + 'px');
-    });
-  });
 
   new MutationObserver(() => {
     if (state !== 'open' || page !== 'chat') return;
     requestAnimationFrame(() => { applySize(); messages.scrollTop = messages.scrollHeight; });
   }).observe(messages, { childList: true, subtree: true, characterData: true });
 
-  (function idleFun() {
-    setTimeout(() => {
-      if (state === 'idle' && !voice && !hover && !compact &&
-          body.classList.contains('eyesmode') && !body.classList.contains('sleepy')) {
-        const h = new Date().getHours();
-        const pool = ['look-l', 'look-r', 'happy', 'look-l'];
-        if (h >= 23 || h < 5) pool.push('tired', 'tired');
-        if (batteryNow != null && batteryNow <= 20 && !pluggedNow) pool.push('scared');
-        flashMood(pool[Math.floor(Math.random() * pool.length)], 900);
-      }
-      idleFun();
-    }, 6000 + Math.random() * 6000);
-  })();
 
   // ---------- boot ----------
   body.dataset.page = page;
@@ -2492,10 +2457,10 @@
   renderShelf();
   renderHistory();
   renderToday();
-  armSleep();
 
   function applyLang(l) {
     setLang(l);
+    setBatt(batteryNow, pluggedNow);
     applyI18n();
     navKey = '';
     historyKey = '';

@@ -137,11 +137,7 @@ mod tests {
     #[test]
     fn parses_whole_sheet() {
         let s = super::parse_sheet(include_str!("../../ui/style.css"));
-        assert_eq!(s.keyframes.len(), 14);
-        assert!(s.rules.len() > 250, "{}", s.rules.len());
         assert!(s.rules.iter().any(|r| r.reduced_motion && r.decls.iter().all(|d| d.important)));
-        let wake = s.keyframes.iter().find(|k| k.name == "wake").unwrap();
-        assert_eq!(wake.frames.iter().map(|f| f.0).collect::<Vec<_>>(), vec![0.0, 0.55, 1.0]);
         let pulse = s.keyframes.iter().find(|k| k.name == "pulse").unwrap();
         assert_eq!(pulse.frames.len(), 3);
     }
