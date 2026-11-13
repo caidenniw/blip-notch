@@ -737,6 +737,8 @@ pub fn easing(s: &str) -> Option<Easing> {
                     }
                     Easing::Points(pts.into_iter().map(|(x, y)| (x.unwrap(), y)).collect())
                 }
+                // Non-standard: `spring(<bounce>)`, see `Easing::Spring`.
+                "spring" if args.len() == 1 => Easing::Spring(number(args[0])?.clamp(0.0, 0.9)),
                 _ => return None,
             }
         }
@@ -771,6 +773,15 @@ mod tests {
         let e = easing("linear(0, 0.024 3.3%, 0.95 50%, 1.011 80%, 1)").unwrap();
         assert!((e.apply(0.8) - 1.011).abs() < 1e-4);
         assert!((e.apply(0.5) - 0.95).abs() < 1e-4);
+    }
+
+    #[test]
+    fn spring_function() {
+        assert_eq!(easing("spring(.2)"), Some(Easing::Spring(0.2)));
+        assert_eq!(easing("spring(0)"), Some(Easing::Spring(0.0)));
+        assert_eq!(easing("spring(2)"), Some(Easing::Spring(0.9)));
+        assert_eq!(easing("spring(.2, 1)"), None);
+        assert_eq!(easing("spring(soft)"), None);
     }
 
     #[test]

@@ -7,6 +7,7 @@ use crate::bus::{self, post, Event};
 use crate::win::window::set_interactive;
 
 static RECT: Mutex<(f64, f64, f64, f64)> = Mutex::new((80.0, 0.0, 360.0, 76.0));
+static COMPACT_RECT: Mutex<(f64, f64)> = Mutex::new((192.0, 32.0));
 static HOVERING: Mutex<bool> = Mutex::new(false);
 static PREV_FG: Mutex<isize> = Mutex::new(0);
 /// Previous (larger) rect kept briefly after a shrink so a pointer left in the vacated area
@@ -218,6 +219,51 @@ fn foreground_rect(
     }
 }
 
+fn rects_overlap(a: &windows::Win32::Foundation::RECT, b: &windows::Win32::Foundation::RECT) -> bool {
+    a.left < a.right && a.top < a.bottom && b.left < b.right && b.top < b.bottom
+        && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+}
+
+fn passive_overlay(ex_style: u32) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW};
+    let flags = WS_EX_LAYERED.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0;
+    ex_style & flags == flags
+}
+
+#[cfg(windows)]
+fn overlapping_app(blip: windows::Win32::Foundation::HWND, area: windows::Win32::Foundation::RECT) -> Option<bool> {
+    use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE};
+    struct Search { blip: HWND, pid: u32, area: RECT, found: bool }
+    unsafe extern "system" fn visit(hwnd: HWND, param: LPARAM) -> windows::core::BOOL {
+        let search = &mut *(param.0 as *mut Search);
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if hwnd == search.blip || pid == 0 || pid == search.pid
+            || !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() || is_shell(hwnd)
+            || passive_overlay(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32) {
+            return true.into();
+        }
+        let mut cloaked = 0u32;
+        let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &mut cloaked as *mut _ as _, std::mem::size_of_val(&cloaked) as u32);
+        if cloaked != 0 { return true.into(); }
+        let mut rect = RECT::default();
+        if DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &mut rect as *mut _ as _, std::mem::size_of_val(&rect) as u32).is_err()
+            && GetWindowRect(hwnd, &mut rect).is_err() {
+            return true.into();
+        }
+        search.found = rects_overlap(&search.area, &rect);
+        (!search.found).into()
+    }
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(blip, Some(&mut pid)); }
+    if pid == 0 { return None; }
+    let mut search = Search { blip, pid, area, found: false };
+    let result = unsafe { EnumWindows(Some(visit), LPARAM(&mut search as *mut _ as isize)) };
+    if search.found { Some(true) } else { result.ok().map(|_| false) }
+}
+
 fn hover_loop() {
     use windows::Win32::Foundation::{POINT, RECT as WinRect};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -354,26 +400,27 @@ fn hover_loop() {
             {
                 // Win+D hands the desktop the top z-order slot; take it back.
                 assert_topmost(hwnd);
-                let nl = pos.x + ((WIN_W / 2.0 - STRIP) * scale) as i32;
-                let nr = pos.x + ((WIN_W / 2.0 + STRIP) * scale) as i32;
-                let touch = AUTO_COMPACT.load(Relaxed) && matches!(foreground_rect(hwnd), Some((r, m))
-                    if r.top <= m.top + 4
-                        && r.bottom > m.top + 100
-                        && r.left < nl
-                        && r.right > nr);
+                let enabled = AUTO_COMPACT.load(Relaxed);
+                let (normal_w, normal_h) = *COMPACT_RECT.lock().unwrap();
+                let area = WinRect {
+                    left: pos.x + ((WIN_W - normal_w) * scale / 2.0).floor() as i32,
+                    top: pos.y,
+                    right: pos.x + ((WIN_W + normal_w) * scale / 2.0).ceil() as i32,
+                    bottom: pos.y + (normal_h * scale).ceil() as i32,
+                };
+                let touch = if enabled { overlapping_app(hwnd, area) } else { Some(false) };
                 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
                 let fg_is_blip = unsafe { GetForegroundWindow() } == hwnd;
-                if touch {
+                if touch == Some(true) {
                     off_hits = 0;
                     if !compact {
                         compact = true;
                         post(Event::Compact(true));
                         conf::log("compact: on");
                     }
-                } else if !fg_is_blip && !taskbar_foreground() {
-                    // Leave compact only after 3 consecutive misses (~720 ms): window/tab switches
-                    // pass through states where no window touches the notch.
-                    off_hits += 1;
+                } else if touch == Some(false) && (!enabled || (!fg_is_blip && !taskbar_foreground())) {
+                    // Require three misses (~720 ms) to avoid flicker during window switches.
+                    off_hits = off_hits.saturating_add(1);
                     if compact && off_hits >= 3 {
                         compact = false;
                         post(Event::Compact(false));
@@ -508,6 +555,12 @@ fn hover_loop() {
     }
 }
 
+pub fn set_compact_rect(w: f64, h: f64) {
+    if w.is_finite() && h.is_finite() {
+        *COMPACT_RECT.lock().unwrap() = (w.clamp(60.0, WIN_W), h.clamp(6.0, WIN_H));
+    }
+}
+
 pub fn set_rect(w: f64, h: f64) {
     let w = w.clamp(60.0, WIN_W);
     let h = h.clamp(24.0, WIN_H);
@@ -533,5 +586,37 @@ pub fn release_focus() {
         unsafe {
             let _ = SetForegroundWindow(windows::Win32::Foundation::HWND(prev as *mut _));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rects_overlap;
+    use windows::Win32::Foundation::RECT;
+
+    #[test]
+    fn compact_overlap_geometry() {
+        let r = |left, top, right, bottom| RECT { left, top, right, bottom };
+        let area = r(100, 0, 292, 32);
+        for candidate in [r(280, 20, 500, 200), r(110, 31, 150, 100)] {
+            assert!(rects_overlap(&area, &candidate));
+        }
+        for candidate in [r(292, 0, 500, 200), r(100, 32, 292, 100), r(0, 0, 100, 32), r(110, 0, 110, 20), r(150, 20, 110, 0)] {
+            assert!(!rects_overlap(&area, &candidate));
+            assert!(!rects_overlap(&candidate, &area));
+        }
+        assert!(rects_overlap(&r(150, 0, 438, 48), &r(420, 40, 500, 200)));
+    }
+
+    #[test]
+    fn compact_ignores_passive_overlays() {
+        use super::passive_overlay;
+        use windows::Win32::UI::WindowsAndMessaging::{WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW};
+        assert!(passive_overlay(0x080800A0)); // Cua cursor overlay
+        assert!(passive_overlay(0x08080080)); // NVIDIA overlay
+        assert!(!passive_overlay(0));
+        assert!(!passive_overlay(WS_EX_TOOLWINDOW.0));
+        assert!(!passive_overlay(WS_EX_LAYERED.0 | WS_EX_TOOLWINDOW.0));
+        assert!(!passive_overlay(WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0));
     }
 }

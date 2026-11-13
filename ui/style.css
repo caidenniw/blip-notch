@@ -14,6 +14,9 @@
   --ease-out: cubic-bezier(.22, 1, .36, 1);
   --ease-close: cubic-bezier(.32, .72, 0, 1);
   --spring: cubic-bezier(.34, 1.32, .5, 1);
+  /* Island morph. `spring(bounce)` takes the duration as its response, like SwiftUI; the
+     values are the ones macOS notch apps use: close critically damped, open slightly bouncy. */
+  --morph: .45s spring(0);
   --w: 168px; --h: 32px; --r: 16px; --e: 11px;
   --rowh: 32px; --ow: 460px; --oh: 176px;
   --art: #2d5bff;
@@ -45,23 +48,23 @@ html, body {
   border-radius: 0 0 var(--r) var(--r);
   overflow: visible;
   contain: layout;
-  transition: width .5s var(--spring), height .5s var(--spring), border-radius .4s ease;
+  transition: width var(--morph), height var(--morph), border-radius var(--morph);
   will-change: width, height;
 }
-body[data-state="open"] #island, body[data-state="answer"] #island, body[data-state="listening"] #island, body[data-state="voice"] #island, body[data-state="hud"] #island { transition: width .62s var(--spring), height .62s var(--spring), border-radius .45s ease; }
+body[data-state="open"], body[data-state="answer"], body[data-state="listening"], body[data-state="voice"], body[data-state="hud"] { --morph: .42s spring(.2); }
 
 .clip {
   position: absolute;
   inset: 0;
   overflow: hidden;
   border-radius: 0 0 var(--r) var(--r);
-  transition: border-radius .45s ease;
+  transition: border-radius var(--morph);
 }
 
 /* telinga: sudut lengkung terbalik yang menyatu dengan tepi layar */
 #island::before, #island::after {
   content: ""; position: absolute; top: 0; width: var(--e); height: var(--e);
-  transition: width .45s ease, height .45s ease;
+  transition: width var(--morph), height var(--morph);
 }
 #island::before { right: 100%; background: radial-gradient(circle at 0 100%, transparent calc(70.71% - .5px), #000 70.71%); }
 #island::after { left: 100%; background: radial-gradient(circle at 100% 100%, transparent calc(70.71% - .5px), #000 70.71%); }
@@ -113,7 +116,7 @@ body[data-state="open"][data-page="music"].has-art .ambient {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity .2s ease, transform .3s var(--ease-close), visibility 0s .2s;
+  transition: opacity .12s ease, transform .3s var(--ease-close), visibility 0s .12s;
 }
 
 body:where(:not([data-state="open"]):not([data-state="hud"]):not([data-state="voice"])) .row,
@@ -124,7 +127,7 @@ body[data-state="answer"] .answer {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: opacity .32s ease .2s, transform .62s var(--spring) .12s, visibility 0s;
+  transition: opacity .24s ease .1s, transform var(--morph) .04s, visibility 0s;
 }
 
 /* Compact sliver while another window hugs the top edge; wins by coming after the rule above. */
@@ -367,10 +370,10 @@ button.link:active { color: var(--ink); border-color: rgba(236,239,247,.45); }
   display: grid;
   grid-template-columns: 416px 0fr;
   column-gap: 0;
-  transition: opacity .2s ease, transform .42s var(--ease-out), visibility 0s .2s, grid-template-columns .62s var(--spring), column-gap .62s var(--spring);
+  transition: opacity .2s ease, transform .42s var(--ease-out), visibility 0s .2s, grid-template-columns var(--morph), column-gap var(--morph);
 }
 .pg.cur[data-p="music"] {
-  transition: opacity .28s ease .06s, transform .5s var(--spring), visibility 0s, grid-template-columns .62s var(--spring), column-gap .62s var(--spring);
+  transition: opacity .28s ease .06s, transform .5s var(--spring), visibility 0s, grid-template-columns var(--morph), column-gap var(--morph);
 }
 body.lyr .pg[data-p="music"] {
   grid-template-columns: 256px 1fr;

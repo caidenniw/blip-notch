@@ -485,16 +485,15 @@ impl Painter {
     // ------------------------------------------------------------------ tree walk
 
     fn node(&mut self, dc: &ID2D1DeviceContext, s: &Scene, n: NodeId) {
-        let Some(es) = s.styles.get(n as usize).and_then(|x| x.clone()) else { return };
+        let Some(es) = s.styles.get(n as usize).and_then(|x| x.as_deref()) else { return };
         let st = &es.base;
         if st.display == Display::None || st.opacity <= 0.002 || !s.geom.world.contains_key(&(n, Part::Main)) {
             return;
         }
         if st.filter.is_empty() {
-            self.node_body(dc, s, n, &es);
+            self.node_body(dc, s, n, es);
         } else {
-            let filters = st.filter.clone();
-            self.filtered(dc, &filters, |p, d| p.node_body(d, s, n, &es));
+            self.filtered(dc, &st.filter, |p, d| p.node_body(d, s, n, es));
         }
     }
 
@@ -600,8 +599,6 @@ impl Painter {
         if ps.display == Display::None || ps.opacity <= 0.002 {
             return;
         }
-        let ps = ps.clone();
-        let filters = ps.filter.clone();
         let body = move |me: &mut Painter, d: &ID2D1DeviceContext| {
             let Some(g) = s.layout.boxes.get(&(n, p)).copied() else { return };
             let layer = ps.opacity < 1.0 || ps.mask.is_some();
@@ -611,17 +608,17 @@ impl Painter {
                 Self::push_layer(d, None, ps.opacity, brush);
             }
             if ps.visible {
-                me.decor(d, m, &ps, &g);
-                me.leaf(d, s, m, (n, p), &ps, Color::WHITE);
+                me.decor(d, m, ps, &g);
+                me.leaf(d, s, m, (n, p), ps, Color::WHITE);
             }
             if layer {
                 unsafe { d.PopLayer() };
             }
         };
-        if filters.is_empty() {
+        if ps.filter.is_empty() {
             body(self, dc);
         } else {
-            self.filtered(dc, &filters, body);
+            self.filtered(dc, &ps.filter, body);
         }
     }
 
@@ -854,6 +851,38 @@ pub fn render_to_png(gfx: &mut Gfx, painter: &mut Painter, s: &Scene, scale: f32
 mod tests {
     use super::*;
     use crate::css::cascade::Cascade;
+
+    #[test]
+    fn filtered_pseudo_preserves_style_and_pixels() {
+        unsafe {
+            windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED).ok().unwrap();
+        }
+        let mut d = Dom::new();
+        d.set_inner_html(d.body, "<div id='panel'></div><div id='sibling'></div>");
+        let styles = Cascade::new("*{margin:0;padding:0;border:0}html,body{width:100px;height:100px}#panel{position:absolute;left:10px;top:10px;width:40px;height:40px;background:white;overflow:hidden;opacity:.8;filter:drop-shadow(2px 2px 1px black)}#panel::before{content:'';position:absolute;left:25px;top:0;width:30px;height:30px;background:#ff0000;filter:blur(1px)}#sibling{position:absolute;left:70px;top:10px;width:20px;height:30px;background:#0000ff}").compute(&d);
+        let mut painter = Painter::new();
+        let layout = crate::layout::compute(&d, &styles, painter.text(), (100.0, 100.0));
+        let geom = geom::compute(&d, &styles, &layout);
+        let overlay = Overlay::default();
+        let scene = Scene { dom: &d, styles: &styles, layout: &layout, geom: &geom, overlay: &overlay };
+        let mut gfx = Gfx::new(100, 100).unwrap();
+        let render = |painter: &mut Painter| {
+            gfx.begin(1.0, None);
+            painter.paint(&gfx, &scene, 1.0);
+            gfx.end().unwrap();
+            gfx.read_rgba().unwrap()
+        };
+        let first = render(&mut painter);
+        let at = |x: usize, y: usize| &first[(y * 100 + x) * 4..(y * 100 + x) * 4 + 4];
+        let red = at(42, 20);
+        assert!(red[0] > 180 && red[1] < 30 && red[2] < 30, "pseudo: {red:?}");
+        assert!(at(62, 20)[0] < 10, "overflow clip");
+        assert_eq!(at(80, 20), &[0, 0, 255, 255]);
+        assert_eq!(first, render(&mut painter));
+        if let Some(path) = std::env::var_os("BLIP_FILTER_FIXTURE") {
+            render_to_png(&mut gfx, &mut painter, &scene, 1.0, (100.0, 100.0), std::path::Path::new(&path)).unwrap();
+        }
+    }
 
     #[test]
     fn stacking_descendants_cross_only_noncontexts_and_keep_clips() {

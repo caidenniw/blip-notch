@@ -1129,7 +1129,12 @@ mod tests {
         assert_eq!(o.opacity, 1.0);
         assert!(o.visible);
         assert_eq!(o.transitions.iter().map(|t| t.prop.as_str()).collect::<Vec<_>>(), ["opacity", "transform", "visibility"]);
-        assert_eq!(o.transitions[0].delay, 200.0);
+        assert_eq!(o.transitions[0].delay, 100.0);
+        // The open state swaps the inherited morph for the bouncy spring.
+        let morph = &o.transitions[1];
+        assert_eq!((morph.dur, morph.delay, &morph.easing), (420.0, 40.0, &crate::gfx::anim::Easing::Spring(0.2)));
+        let island = &st[island as usize].as_ref().unwrap().base.transitions;
+        assert!(island.iter().all(|t| t.dur == 420.0 && t.easing == crate::gfx::anim::Easing::Spring(0.2)), "{island:?}");
     }
 
     #[test]

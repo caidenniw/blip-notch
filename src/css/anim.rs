@@ -2,7 +2,7 @@
 use super::cascade::{apply, subst, Cascade, ElemStyle, Style};
 use super::value::{Bg, Color, Filter, Lp, Lpa, Shadow, Tf, Track};
 use crate::dom::NodeId;
-use crate::gfx::anim::Easing;
+use crate::gfx::anim::{spring, spring_settle, Easing};
 use crate::layout::Part;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -114,8 +114,8 @@ fn get(s: &Style, p: Prop) -> Val {
 fn set(s: &mut Style, p: Prop, v: Val) {
     match (p, v) {
         (Prop::Opacity, Val::Num(x)) => s.opacity = x.clamp(0.0, 1.0),
-        (Prop::Width, Val::Lpa(x)) => s.width = x,
-        (Prop::Height, Val::Lpa(x)) => s.height = x,
+        (Prop::Width, Val::Lpa(x)) => s.width = non_negative(x),
+        (Prop::Height, Val::Lpa(x)) => s.height = non_negative(x),
         (Prop::Radius, Val::Radius(x)) => s.radius = x,
         (Prop::Color, Val::Color(x)) => s.color = x,
         (Prop::Background, Val::Bg(x)) => s.background = x,
@@ -131,6 +131,14 @@ fn set(s: &mut Style, p: Prop, v: Val) {
         (Prop::Filter, Val::Filters(x)) => s.filter = x,
         (Prop::Visibility, Val::Vis(x)) => s.visible = x,
         _ => {}
+    }
+}
+
+/// A spring may swing a size past zero.
+fn non_negative(v: Lpa) -> Lpa {
+    match v {
+        Lpa::L(l) if l.pct == 0.0 && l.px < 0.0 => Lpa::L(Lp::ZERO),
+        v => v,
     }
 }
 
@@ -275,31 +283,82 @@ struct Running {
     dur: f64,
     delay: f64,
     easing: Easing,
+    /// Springs only: initial velocity in units of `to - from` per `dur`.
+    v0: f32,
+    /// Time after the delay during which the value moves; a spring outlasts `dur`.
+    span: f64,
 }
 
 impl Running {
-    fn progress(&self, now: f64) -> f32 {
-        let e = now - self.start - self.delay;
-        if e < 0.0 {
-            0.0
-        } else if self.dur <= 0.0 {
-            1.0
-        } else {
-            (e / self.dur).min(1.0) as f32
-        }
+    fn new(from: Val, to: Val, start: f64, dur: f64, delay: f64, easing: Easing, v0: f32) -> Self {
+        let span = match easing {
+            Easing::Spring(b) => dur * spring_settle(b, v0) as f64,
+            _ => dur,
+        };
+        Running { from, to, start, dur, delay, easing, v0, span }
     }
     fn value(&self, now: f64) -> Val {
-        let p = self.progress(now);
-        let t = if p <= 0.0 || p >= 1.0 { p } else { self.easing.apply(p) };
-        // Before the delay ends the old value shows; `visibility` uses the raw progress.
-        if now - self.start < self.delay {
+        let e = now - self.start - self.delay;
+        // Before the delay ends the old value shows.
+        if e < 0.0 {
             return self.from.clone();
         }
+        let t = if e >= self.span {
+            1.0
+        } else {
+            let p = (e / self.dur) as f32;
+            match self.easing {
+                Easing::Spring(b) => spring(b, self.v0, p).0,
+                _ if p <= 0.0 => 0.0,
+                _ => self.easing.apply(p),
+            }
+        };
         lerp(&self.from, &self.to, t)
     }
     fn done(&self, now: f64) -> bool {
-        now - self.start >= self.delay + self.dur
+        now - self.start >= self.delay + self.span
     }
+    /// `(position, velocity per ms)` of a spring in flight, in units of `to - from`.
+    fn motion(&self, now: f64) -> Option<(f32, f32)> {
+        let e = now - self.start - self.delay;
+        match self.easing {
+            Easing::Spring(b) if e >= 0.0 && e < self.span => {
+                let (x, v) = spring(b, self.v0, (e / self.dur) as f32);
+                Some((x, v / self.dur as f32))
+            }
+            _ => None,
+        }
+    }
+}
+
+fn scalar(v: &Val) -> Option<f32> {
+    match v {
+        Val::Num(x) => Some(*x),
+        Val::Lp(l) | Val::Lpa(Lpa::L(l)) if l.pct == 0.0 => Some(l.px),
+        _ => None,
+    }
+}
+
+/// Caps carried velocity: retargeting a hair away from the new target would otherwise turn
+/// any speed into a huge relative one.
+const MAX_CARRY: f32 = 30.0;
+
+/// Initial velocity (in units of `current → to` per `dur` ms) that lets a spring replacing
+/// `old` mid-flight keep moving instead of restarting from rest.
+fn carry(old: &Running, now: f64, current: &Val, to: &Val, dur: f64) -> f32 {
+    let Some((x, vel)) = old.motion(now) else { return 0.0 };
+    // Old span over new span. A straight reversal retraces the travelled part, whatever the
+    // value type; otherwise only one-dimensional values have such a ratio.
+    let ratio = if *to == old.from {
+        -1.0 / x
+    } else {
+        match (scalar(&old.from), scalar(&old.to), scalar(current), scalar(to)) {
+            (Some(a), Some(b), Some(c), Some(d)) => (b - a) / (d - c),
+            _ => return 0.0,
+        }
+    };
+    let v0 = vel * ratio * dur as f32;
+    if v0.is_finite() { v0.clamp(-MAX_CARRY, MAX_CARRY) } else { 0.0 }
 }
 
 struct AnimRun {
@@ -402,10 +461,13 @@ impl Animator {
                     };
                     match covers(&st.transitions, p).filter(|t| t.dur + t.delay.max(0.0) > 0.0) {
                         Some(t) if current != v => {
-                            bs.running.insert(
-                                p,
-                                Running { from: current, to: v.clone(), start: now, dur: t.dur as f64 * scale, delay: t.delay as f64 * scale, easing: t.easing.clone() },
-                            );
+                            let (dur, delay) = (t.dur as f64 * scale, t.delay as f64 * scale);
+                            // A delayed transition holds its start value, so nothing carries over.
+                            let v0 = match (&t.easing, bs.running.get(&p)) {
+                                (Easing::Spring(_), Some(old)) if delay <= 0.0 => carry(old, now, &current, &v, dur),
+                                _ => 0.0,
+                            };
+                            bs.running.insert(p, Running::new(current, v.clone(), now, dur, delay, t.easing.clone(), v0));
                             self.events.push((key.0, "transitionrun"));
                         }
                         _ => {
@@ -620,6 +682,55 @@ mod tests {
         assert!(peak > 460.0, "spring must overshoot: {peak}");
         assert_eq!(w(&a.apply(&c, &d, &st, 700.0)), 460.0);
         assert!(a.events.contains(&(island as u32, "transitionend")));
+    }
+
+    fn px(o: &[Option<Rc<ElemStyle>>], n: usize) -> f32 {
+        o[n].as_ref().unwrap().base.width.lp().unwrap().px
+    }
+
+    #[test]
+    fn interrupted_spring_keeps_moving() {
+        let c = Cascade::new("#island { width: 100px; transition: width 400ms spring(.2) } body[data-state=open] #island { width: 300px }");
+        let mut d = Dom::from_index();
+        let island = d.by_id("island").unwrap() as usize;
+        let mut a = Animator::default();
+        a.apply(&c, &d, &c.compute(&d), 0.0);
+        d.set_attr(d.body, "data-state", "open");
+        let open = c.compute(&d);
+        a.apply(&c, &d, &open, 0.0);
+        let (w158, w160) = (px(&a.apply(&c, &d, &open, 158.0), island), px(&a.apply(&c, &d, &open, 160.0), island));
+        assert!(w160 > w158);
+        // Reversed mid-flight: momentum carries the edge outward a little further at the
+        // same pace, then the spring pulls it back to rest exactly on the target.
+        d.set_attr(d.body, "data-state", "idle");
+        let idle = c.compute(&d);
+        assert_eq!(px(&a.apply(&c, &d, &idle, 160.0), island), w160);
+        let w162 = px(&a.apply(&c, &d, &idle, 162.0), island);
+        assert!(w162 > w160, "restarted from rest: {w160} -> {w162}");
+        assert!(((w162 - w160) / (w160 - w158) - 1.0).abs() < 0.25, "{w158} {w160} {w162}");
+        let peak = (170..=1500).step_by(10).map(|t| px(&a.apply(&c, &d, &idle, t as f64), island)).fold(w162, f32::max);
+        assert!(peak < 300.0, "{peak}");
+        assert_eq!(px(&a.apply(&c, &d, &idle, 1600.0), island), 100.0);
+        assert!(!a.busy());
+    }
+
+    #[test]
+    fn island_closes_without_undershoot() {
+        let c = Cascade::new(include_str!("../../ui/style.css"));
+        let mut d = Dom::from_index();
+        let island = d.by_id("island").unwrap() as usize;
+        let mut a = Animator::default();
+        d.set_attr(d.body, "data-state", "open");
+        d.style_set(d.body, "--w", "460px");
+        a.apply(&c, &d, &c.compute(&d), 0.0);
+        d.set_attr(d.body, "data-state", "idle");
+        d.style_set(d.body, "--w", "192px");
+        let st = c.compute(&d);
+        a.apply(&c, &d, &st, 0.0);
+        let low = (0..=1000).step_by(5).map(|t| px(&a.apply(&c, &d, &st, t as f64), island)).fold(f32::MAX, f32::min);
+        assert!(low >= 192.0, "closing dipped to {low}");
+        assert_eq!(px(&a.apply(&c, &d, &st, 1000.0), island), 192.0);
+        assert!(!a.busy());
     }
 
     #[test]

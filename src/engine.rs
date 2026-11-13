@@ -262,3 +262,69 @@ impl Engine {
 thread_local! {
     pub static DRAG: RefCell<std::collections::VecDeque<(u32, Vec<String>)>> = RefCell::new(Default::default());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    /// Isolated renderer workload; never enters main or starts desktop services.
+    #[test]
+    #[ignore = "manual release benchmark"]
+    fn native_hot_paths_benchmark() {
+        unsafe {
+            windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED).ok().unwrap();
+        }
+        static TEXT_HTML: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("<html><body>{}{}{}</body></html>", "<p>é 😀 trailing  </p>".repeat(64), "<input placeholder='Hint'>".repeat(8), "<textarea></textarea>".repeat(8)));
+        let text_doc = Doc {
+            html: TEXT_HTML.as_str(),
+            css: "*{margin:0;padding:0;border:0;font-size:14px;line-height:20px}html{width:640px;height:460px}body{width:300px}p{width:100%;white-space:pre-wrap}input,textarea{width:100px}",
+            scripts: &[], view: (640.0, 460.0),
+        };
+        static PAINT_HTML: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("<html><body>{}</body></html>", (0..32).map(|i| format!("<div style='left:{}px;top:{}px'></div>", 10 + i % 8 * 76, 10 + i / 8 * 100)).collect::<String>()));
+        let paint_doc = Doc {
+            html: PAINT_HTML.as_str(),
+            css: "*{margin:0;padding:0;border:0}html,body{width:640px;height:460px}div{position:absolute;width:60px;height:70px;background:#ffffff;filter:blur(1px);opacity:.8;overflow:hidden;mask-image:linear-gradient(black,transparent)}div::before{content:'';position:absolute;left:15px;top:10px;width:35px;height:40px;background:#ff0000;filter:drop-shadow(2px 2px 1px black)}",
+            scripts: &[], view: (640.0, 460.0),
+        };
+        for (case, doc) in [("layout", &text_doc), ("paint", &paint_doc)] {
+            let engine = Engine::boot(doc, Storage::memory(), 0.0, true, &[]);
+            let gfx = crate::gfx::Gfx::new(640, 460).unwrap();
+            engine.pump(0.0, true);
+            {
+                let p = engine.page.borrow();
+                let node = p.dom.query_str(p.dom.html, if case == "layout" { "p" } else { "div" }, false)[0];
+                let g = p.layout.boxes[&(node, Part::Main)];
+                assert!(g.x.is_finite() && g.y.is_finite() && g.w > 0.0 && g.h > 0.0);
+                if case == "paint" { assert!(g.x + g.w <= 640.0 && g.y + g.h <= 460.0); }
+            }
+            let mut tick = 0u64;
+            let mut iteration = || {
+                tick += 1;
+                if case == "layout" {
+                    let mut p = engine.page.borrow_mut();
+                    let body = p.dom.body;
+                    p.dom.style_set(body, "width", black_box(if tick % 2 == 0 { "300px" } else { "301px" }));
+                    drop(p);
+                    engine.pump(black_box(tick as f64 * 16.0), true);
+                    black_box(&engine.page.borrow().layout.boxes);
+                } else {
+                    gfx.begin(black_box(1.0), None);
+                    engine.paint(&gfx, 1.0);
+                    gfx.end().unwrap();
+                }
+            };
+            for _ in 0..100 { iteration(); }
+            for batch in 1..=5 {
+                let iterations = 1000;
+                let start = Instant::now();
+                for _ in 0..iterations { iteration(); }
+                let elapsed = start.elapsed();
+                let ns = elapsed.as_nanos() as f64 / iterations as f64;
+                assert!(ns.is_finite());
+                println!("case={case} batch={batch} iterations={iterations} elapsed_ms={:.6} ns_per_iter={ns:.3}", elapsed.as_secs_f64() * 1000.0);
+            }
+        }
+    }
+}

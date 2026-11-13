@@ -129,6 +129,12 @@ pub fn dispatch(id: u32, cmd: &str, args: &str) -> Outcome {
             crate::hover::set_rect(a.get("w").and_then(Value::as_f64).unwrap_or(168.0), a.get("h").and_then(Value::as_f64).unwrap_or(32.0));
             Outcome::Now(Ok(Value::Null))
         }
+        "set_compact_rect" => {
+            if let (Some(w), Some(h)) = (a.get("w").and_then(Value::as_f64), a.get("h").and_then(Value::as_f64)) {
+                crate::hover::set_compact_rect(w, h);
+            }
+            Outcome::Now(Ok(Value::Null))
+        }
         "focus_input" => {
             crate::hover::focus_input();
             crate::win::window::take_focus(bus::hwnd());

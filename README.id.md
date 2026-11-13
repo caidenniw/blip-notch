@@ -110,6 +110,8 @@ Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
 
 Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
 
+Versi 0.3.3 menambahkan compact berbasis overlap: jendela aplikasi terlihat yang beririsan dengan area normal idle/live membuat Blip mengecil menjadi garis tipis, termasuk jendela tidak aktif. Jendela minimized/cloaked, shell desktop, dan overlay layered pasif (termasuk kursor Cua dan NVIDIA) diabaikan. Hover tepi atas untuk membuka; geser jendela menjauh agar ukuran normal kembali. Aplikasi fullscreen tetap menyembunyikan Blip sepenuhnya. Area deteksi tidak ikut menyusut sehingga compact tidak berkedip. Perubahan bentuk memakai pegas teredam dengan sudut dan telinga tersinkron; jalur renderer meminjam teks/style tanpa menyalinnya. Gunakan executable release teroptimasi untuk sehari-hari.
+
 Versi 0.3.2 mempertahankan status idle dalam satu baris: mata kecil netral, jam HH:mm 24 jam menetap, serta ikon dan persentase baterai dibulatkan bila tersedia. Charging diprioritaskan termasuk pada 0%; baterai tanpa charging pada 20% atau kurang berwarna merah; baterai tidak tersedia menyembunyikan grupnya. Pill tetap 192×32 dan compact sliver tidak berubah. Mata hanya berkedip sesekali tanpa glow, mengikuti kursor, mood acak atau transisi tidur. Musik dan lirik tidak berubah. Ikon **Awake b** dan kontrol pengingat Tugas dari 0.3.1 tetap dipertahankan; upgrade menjaga konfigurasi dan data tugas.
 
 Batasan yang diketahui: rilis tampilan idle ini tidak memperbaiki batasan keamanan existing. API kontrol loopback belum mengautentikasi pemanggil; dikte dapat menempelkan teks ke aplikasi foreground saat hasil selesai; recovery storage rusak dan penyimpanan Pengaturan bersamaan masih perlu diperkuat. Hindari dikte sensitif dan jangan membuka port kontrol ke host lain.
@@ -166,9 +168,14 @@ powershell -File tools\ref\run.ps1
 
 Harness membandingkan 16 snapshot native dengan headless Edge pada 640×460; setiap skenario harus di bawah 1,5% piksel berbeda. Executable menyertakan `ui/index.html`, `ui/style.css`, `ui/lib.js`, dan `ui/app.js` asli, bukan terjemahan UI manual ke Rust.
 
+Probe renderer isolated (Windows/Direct2D): `cargo test --release engine::tests::native_hot_paths_benchmark -- --ignored --exact --nocapture --test-threads=1`. Gunakan `CARGO_TARGET_DIR=target/refactor-build`, `APPDATA` sandbox kosong, dan `BLIP_CONFIG` di sandbox tersebut. Test tidak menjalankan `main`, mutex instance, window, tray, atau services; storage hanya memori. Dua workload layout Unicode/control dan paint filter/pseudo memakai warmup 100, lalu 5×1000 iterasi; output `case`, `batch`, `iterations`, `elapsed_ms`, `ns_per_iter`. Bandingkan executable baseline/candidate tersimpan pada profile dan mesin sama. Angka ini bukan CPU idle atau RAM aplikasi terpasang.
+
+
 Penyimpanan UI memakai `%APPDATA%\Blip\localstorage.json`, terpisah dari `blip.config.json`. `state.json` dari port native sebelumnya dibiarkan dan tidak dimigrasi. Batas yang diketahui: tanpa panah spinner input angka, scrollbar tipis pada jawaban, dan seleksi teks terbatas satu bubble.
 
 Frame animasi mengikuti refresh rate monitor (60/120/144 Hz) lewat `DwmFlush`; saat tidak ada animasi, timer Win32 waitable beresolusi tinggi hanya bangun untuk timer JS, caret, dan penyimpanan, sehingga CPU idle mendekati nol. Cascade CSS yang tidak berubah memakai cache antarframe animasi, dan animasi yang hanya mengubah tampilan tidak menghitung ulang layout. Semua build bisa mencatat durasi update/present per frame ke `%APPDATA%\Blip\blip.log` melalui `BLIP_PROFILE_FRAMES=1`; hasilnya diagnostik, bukan jaminan FPS.
+
+Perubahan bentuk island (ukuran, radius sudut, telinga) memakai pegas teredam, ditulis `spring(<bounce>)` di `ui/style.css`. Easing ini khusus mesin CSS native Blip: durasi transisi adalah response pegas, bukan seluruh waktu sampai berhenti. Membuka memakai response 0,42 dtk dengan bounce 0,2, menutup 0,45 dtk teredam kritis. Pegas yang dipotong mempertahankan kecepatan untuk nilai skalar dan pembalikan langsung, dengan batas pengaman bila target terlalu dekat. Parameter terinspirasi aplikasi notch macOS, bukan replika persis gerakan proprietary Apple. Nilai kelancaran dari build release; biaya frame debug jauh lebih tinggi pada probe lokal 144 Hz, bukan jaminan FPS tampilan end-to-end.
 
 ## Privasi
 

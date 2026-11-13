@@ -309,6 +309,11 @@
   }
 
   function applySize() {
+    if (state === 'idle' || state === 'live') {
+      const [normalW, normalH] = state === 'live' && body.dataset.live === 'music' && lrcLines.length
+        ? SIZES.liveLyr : SIZES[state];
+      invoke('set_compact_rect', { w: normalW, h: normalH }).catch(() => {});
+    }
     let w;
     let h;
     if (state === 'open') {

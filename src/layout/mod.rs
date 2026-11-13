@@ -456,9 +456,9 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
             let Some(ctx) = ctx else {
                 return taffy::compute_leaf_layout(inputs, style, |_, _| 0.0, |_, _| Size::ZERO);
             };
-            let (key, txt, ts, inset, control) = match ctx {
-                Ctx::Text { key, text, style, inset } => (*key, text.clone(), *style, *inset, None),
-                Ctx::Control { key, text, style, inset, multiline } => (*key, text.clone(), *style, *inset, Some(*multiline)),
+            let (txt, ts, inset, control) = match ctx {
+                Ctx::Text { text, style, inset, .. } => (text.as_str(), *style, *inset, None),
+                Ctx::Control { text, style, inset, multiline, .. } => (text.as_str(), *style, *inset, Some(*multiline)),
             };
             let mut base = 0.0;
             let mut out = taffy::compute_leaf_layout(inputs, style, |_, _| 0.0, |known, avail| {
@@ -466,7 +466,7 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
                     AvailableSpace::Definite(w) => w,
                     AvailableSpace::MinContent => {
                         if ts.wrap && control.is_none() {
-                            text.min_width(&txt, &ts)
+                            text.min_width(txt, &ts)
                         } else {
                             f32::INFINITY
                         }
@@ -477,8 +477,8 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
                 if control == Some(false) {
                     ts2.wrap = false;
                 }
-                let measure_txt = if txt.is_empty() { "\u{200b}".to_string() } else { txt.clone() };
-                let l = text.layout(&measure_txt, &ts2, if max_w.is_finite() { max_w } else { f32::INFINITY }, f32::INFINITY);
+                let measure_txt = if txt.is_empty() { "\u{200b}" } else { txt };
+                let l = text.layout(measure_txt, &ts2, if max_w.is_finite() { max_w } else { f32::INFINITY }, f32::INFINITY);
                 let m = metrics(&l);
                 base = first_baseline(&l);
                 let line = match ts.line_height {
@@ -512,7 +512,8 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
         cb_origin: (f32, f32),
         b: &Builder,
         tmap: &HashMap<(NodeId, Part), TNode>,
-        out: &mut Layout,
+        kids: &HashMap<NodeId, Vec<Kid>>,
+        boxes: &mut HashMap<(NodeId, Part), BoxGeom>,
     ) {
         let Some(&t) = tmap.get(&(n, Part::Main)) else { return };
         let Ok(l) = b.tree.layout(t) else { return };
@@ -530,18 +531,18 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
             content_w: l.scrollable_overflow_rect.right,
             content_h: l.scrollable_overflow_rect.bottom,
         };
-        out.boxes.insert((n, Part::Main), g);
+        boxes.insert((n, Part::Main), g);
         let my_cb = if st.position != Position::Static || n == b.dom.html { (x, y) } else { cb_origin };
-        for k in out.kids.get(&n).cloned().unwrap_or_default() {
+        for &k in kids.get(&n).map(Vec::as_slice).unwrap_or(&[]) {
             match k {
-                Kid::Elem(c) => walk(c, (x, y), my_cb, b, tmap, out),
+                Kid::Elem(c) => walk(c, (x, y), my_cb, b, tmap, kids, boxes),
                 Kid::Part(p) => {
                     if let Some(&pt) = tmap.get(&(n, p)) {
                         if let Ok(pl) = b.tree.layout(pt) {
                             let abs = matches!(p, Part::Before | Part::After)
                                 && b.style(n).and_then(|s| if p == Part::Before { s.before.as_ref() } else { s.after.as_ref() }).is_some_and(|s| s.position == Position::Absolute);
                             let o = if abs { my_cb } else { (x, y) };
-                            out.boxes.insert(
+                            boxes.insert(
                                 (n, p),
                                 BoxGeom {
                                     x: o.0 + pl.location.x,
@@ -557,7 +558,7 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
             }
         }
     }
-    walk(dom.html, (0.0, 0.0), (0.0, 0.0), &b, &tmap, &mut out);
+    walk(dom.html, (0.0, 0.0), (0.0, 0.0), &b, &tmap, &out.kids, &mut out.boxes);
 
     // Text leaves: final DirectWrite layouts at the content-box width.
     for (key, t) in &b.map {
@@ -636,6 +637,53 @@ pub fn compute(dom: &Dom, styles: &[Option<Rc<ElemStyle>>], text: &mut Text, vie
 mod tests {
     use super::*;
     use crate::css::cascade::Cascade;
+
+    #[test]
+    fn measurement_preserves_empty_controls_and_wrapped_unicode() {
+        let mut d = Dom::new();
+        let unicode = "é 😀 trailing  ".repeat(8);
+        d.set_inner_html(d.body, &format!("<input id='input' placeholder='Hint'><textarea id='area'></textarea><p id='text'>{unicode}</p><span id='short'>é 😀 trailing  </span>"));
+        let c = Cascade::new("*{margin:0;padding:0;border:0;font-size:14px;line-height:20px}html,body{width:40px}p{width:100%;white-space:pre-wrap}span{width:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+        let mut text = Text::new().unwrap();
+        let narrow = compute(&d, &c.compute(&d), &mut text, (200.0, 400.0));
+        let key = |id: &str| (d.by_id(id).unwrap(), Part::Main);
+        for id in ["input", "area"] {
+            assert!(narrow.boxes[&key(id)].h >= 20.0);
+            assert!(narrow.leaves[&key(id)].placeholder);
+        }
+        assert_eq!(narrow.leaves[&key("input")].text, "Hint");
+        assert_eq!(narrow.leaves[&key("area")].text, "");
+        assert_eq!(narrow.leaves[&key("text")].text, unicode);
+        assert!(!narrow.leaves[&key("text")].placeholder);
+        assert!(narrow.leaves[&key("text")].style.wrap);
+        assert!(!narrow.leaves[&key("short")].style.wrap);
+        assert!(narrow.leaves[&key("short")].style.ellipsis);
+        let paragraph = key("text");
+        assert!(narrow.boxes[&paragraph].h > 20.0);
+        d.style_set(d.html, "width", "160px");
+        d.style_set(d.body, "width", "160px");
+        let wide = compute(&d, &c.compute(&d), &mut text, (200.0, 400.0));
+        assert!(wide.boxes[&paragraph].h < narrow.boxes[&paragraph].h);
+        assert_eq!(wide.leaves[&paragraph].text, unicode);
+    }
+
+    #[test]
+    fn absolute_descendants_keep_positioned_containing_block() {
+        let mut d = Dom::new();
+        d.set_inner_html(d.body, "<div id='ancestor'><div id='static'><div id='child'></div><div id='nested'><div id='inner'></div></div></div></div>");
+        let c = Cascade::new("*{margin:0;padding:0;border:0}html,body{width:200px;height:200px}#ancestor{position:relative;left:10px;top:20px;width:100px;height:100px}#child{position:absolute;left:5px;top:7px;width:10px;height:10px}#ancestor::before{content:'';position:absolute;left:3px;top:4px;width:6px;height:6px}#nested{position:absolute;left:2px;top:3px;width:20px;height:20px}#inner{position:absolute;left:1px;top:2px;width:4px;height:4px}");
+        let mut text = Text::new().unwrap();
+        let l = compute(&d, &c.compute(&d), &mut text, (200.0, 200.0));
+        for (id, part, expected) in [
+            ("child", Part::Main, (15.0, 27.0, 10.0, 10.0)),
+            ("ancestor", Part::Before, (13.0, 24.0, 6.0, 6.0)),
+            ("nested", Part::Main, (12.0, 23.0, 20.0, 20.0)),
+            ("inner", Part::Main, (13.0, 25.0, 4.0, 4.0)),
+        ] {
+            let g = l.boxes[&(d.by_id(id).unwrap(), part)];
+            assert_eq!((g.x, g.y, g.w, g.h), expected, "{id} {part:?}");
+        }
+    }
 
     fn run(d: &Dom) -> Layout {
         let c = Cascade::new(include_str!("../../ui/style.css"));
