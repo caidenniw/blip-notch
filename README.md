@@ -37,7 +37,7 @@ Native Rust host: QuickJS executes the original UI JavaScript, taffy lays out th
 
 ## Install
 
-1. Download `Blip_0.3.2_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
+1. Download `Blip_0.3.4_x64-setup.exe` from [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user install, no admin rights, includes an uninstaller).
 2. The installer is unsigned: SmartScreen shows a warning. Click "More info" -> "Run anyway".
 3. Run Blip once. It creates `%APPDATA%\Blip\blip.config.json`.
 4. Open Settings (gear in the notch header or tray), enter the endpoint, API key and model ID under AI, then Connect. Settings are saved only when the main model answers successfully.
@@ -105,7 +105,9 @@ Tray: Buka/Tutup (open/close), Mulai saat login (start at login), Pengaturan… 
 
 Settings window (600×540, gear icon in the header): AI endpoint/key/models with a live model test, voice input and output, notch behaviour, page visibility, focus and water targets, autostart, hotkey, dictate key, motion and animation speed. Hotkey choices: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` stays fixed. Changes to `blip.config.json` apply immediately; island prefs (hover, close delay, hidden pages, nudge, focus/water numbers) live in `localstorage.json`.
 
-Version 0.3.3 adds overlap-aware compact mode: visible application windows intersecting the normal idle/live footprint shrink Blip to a thin line, including inactive windows. Minimized/cloaked windows, desktop shell windows, and passive layered overlays (including Cua cursor and NVIDIA overlays) are ignored. Hold the pointer still for 600 ms in the central 60 logical pixels of the top edge to reopen. After clicking there, move out and back in to try again. Moving the window away restores normal size. True fullscreen apps still hide Blip completely. The detection footprint stays stable while compact to prevent flicker. Island morphs use damped springs with synchronized corners and ears; renderer hot paths borrow text/styles instead of copying them. Use the optimized release executable for everyday use.
+Version 0.3.4 makes compact reopening deliberate: keep the pointer within 4 logical pixels of its entry position for 600 ms in the central 60 logical pixels of the top edge (2 logical pixels high). Any mouse button blocks reopening until the pointer leaves and re-enters. Larger movements restart the dwell; leaving the strip resets it. Real file drags still open Blip immediately. Fullscreen hiding, overlap detection and spring motion are unchanged.
+
+Version 0.3.3 added overlap-aware compact mode: visible application windows intersecting the normal idle/live footprint shrink Blip to a thin line, including inactive windows. Minimized/cloaked windows, desktop shell windows, and passive layered overlays (including Cua cursor and NVIDIA overlays) are ignored. Moving the window away restores normal size; true fullscreen apps still hide Blip completely. The detection footprint stays stable while compact to prevent flicker. Island morphs use damped springs with synchronized corners and ears; renderer hot paths borrow text/styles instead of copying them. Use the optimized release executable for everyday use.
 
 Version 0.3.2 keeps idle status in one stable row: small neutral eyes, a persistent 24-hour HH:mm clock, and battery icon with rounded percentage when available. Charging takes priority even at 0%; unplugged battery at 20% or below is red; unavailable battery hides its group. The pill stays 192×32, with the existing compact sliver unchanged. Eyes blink occasionally without glow, cursor-following, random moods or sleep transitions. Music and lyrics are unchanged. The **Awake b** icon and explicit Tasks reminder controls from 0.3.1 remain; upgrades preserve config and task storage.
 

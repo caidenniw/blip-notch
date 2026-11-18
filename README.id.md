@@ -26,7 +26,7 @@ Host native Rust: QuickJS menjalankan JavaScript UI asli, taffy menghitung layou
 
 ## Instal
 
-1. Unduh `Blip_0.3.2_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
+1. Unduh `Blip_0.3.4_x64-setup.exe` dari halaman [Releases](https://github.com/caidenniw/blip-notch/releases) (per-user, tanpa admin, ada uninstaller).
 2. Installer belum ditandatangani: SmartScreen menampilkan peringatan, klik "More info" -> "Run anyway".
 3. Jalankan Blip sekali. Aplikasi membuat `%APPDATA%\Blip\blip.config.json`.
 4. Buka Pengaturan (ikon gear di header notch atau tray), isi endpoint, API key dan model di bagian AI, lalu Hubungkan. Konfigurasi disimpan hanya setelah model utama berhasil menjawab.
@@ -110,7 +110,9 @@ Tray: Buka/Tutup, Mulai saat login, Pengaturan…, Keluar.
 
 Jendela Pengaturan (600×540, ikon gear di header): endpoint/API key/model AI dengan tes model langsung, suara masuk dan keluar, perilaku notch, halaman yang tampil, target fokus dan air, autostart, hotkey, tombol dikte, gerakan dan kecepatan animasi. Pilihan hotkey: Ctrl+Alt+B, Ctrl+Alt+Space, Ctrl+Shift+Space; `Ctrl+Alt+Q` tetap. Perubahan `blip.config.json` langsung berlaku; preferensi island (hover, jeda tutup, halaman tersembunyi, nudge, angka fokus/air) disimpan di `localstorage.json`.
 
-Versi 0.3.3 menambahkan compact berbasis overlap: jendela aplikasi terlihat yang beririsan dengan area normal idle/live membuat Blip mengecil menjadi garis tipis, termasuk jendela tidak aktif. Jendela minimized/cloaked, shell desktop, dan overlay layered pasif (termasuk kursor Cua dan NVIDIA) diabaikan. Untuk membuka kembali, diamkan kursor selama 600 ms di area selebar 60 piksel logis di tengah tepi atas layar. Setelah mengeklik area itu, geser kursor keluar lalu masuk lagi. Geser jendela menjauh agar ukuran normal kembali. Aplikasi fullscreen tetap menyembunyikan Blip sepenuhnya. Area deteksi tidak ikut menyusut sehingga compact tidak berkedip. Perubahan bentuk memakai pegas teredam dengan sudut dan telinga tersinkron; jalur renderer meminjam teks/style tanpa menyalinnya. Gunakan executable release teroptimasi untuk sehari-hari.
+Versi 0.3.4 membuat pembukaan compact lebih disengaja: diamkan kursor dalam jarak 4 piksel logis dari posisi masuk selama 600 ms di area tengah selebar 60 piksel logis dan setinggi 2 piksel logis pada tepi atas. Tombol mouse apa pun memblokir pembukaan sampai kursor keluar lalu masuk lagi. Gerakan lebih besar mengulang hitungan; keluar area meresetnya. Drag file sungguhan tetap langsung membuka Blip. Deteksi overlap, fullscreen, dan animasi pegas tidak berubah.
+
+Versi 0.3.3 menambahkan compact berbasis overlap: jendela aplikasi terlihat yang beririsan dengan area normal idle/live membuat Blip mengecil menjadi garis tipis, termasuk jendela tidak aktif. Jendela minimized/cloaked, shell desktop, dan overlay layered pasif (termasuk kursor Cua dan NVIDIA) diabaikan. Geser jendela menjauh agar ukuran normal kembali; aplikasi fullscreen tetap menyembunyikan Blip sepenuhnya. Area deteksi tidak ikut menyusut sehingga compact tidak berkedip. Perubahan bentuk memakai pegas teredam dengan sudut dan telinga tersinkron; jalur renderer meminjam teks/style tanpa menyalinnya. Gunakan executable release teroptimasi untuk sehari-hari.
 
 Versi 0.3.2 mempertahankan status idle dalam satu baris: mata kecil netral, jam HH:mm 24 jam menetap, serta ikon dan persentase baterai dibulatkan bila tersedia. Charging diprioritaskan termasuk pada 0%; baterai tanpa charging pada 20% atau kurang berwarna merah; baterai tidak tersedia menyembunyikan grupnya. Pill tetap 192×32 dan compact sliver tidak berubah. Mata hanya berkedip sesekali tanpa glow, mengikuti kursor, mood acak atau transisi tidur. Musik dan lirik tidak berubah. Ikon **Awake b** dan kontrol pengingat Tugas dari 0.3.1 tetap dipertahankan; upgrade menjaga konfigurasi dan data tugas.
 
