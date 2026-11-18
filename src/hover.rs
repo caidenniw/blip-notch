@@ -1,3 +1,5 @@
+mod compact_wake;
+use compact_wake::CompactWake;
 use crate::conf;
 use crate::dropzone;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
@@ -18,13 +20,11 @@ pub static HIDE_FULLSCREEN: AtomicBool = AtomicBool::new(true);
 pub static AUTO_COMPACT: AtomicBool = AtomicBool::new(true);
 
 const PAD_IN: f64 = 16.0;
-/// Poll period; the `iter %` / `dwell` counts below are scaled to it.
+/// Poll period; the `iter %` counts below are scaled to it.
 const TICK_MS: u64 = 8;
 const PAD_OUT: f64 = 6.0;
 const WIN_W: f64 = 640.0;
 const WIN_H: f64 = 460.0;
-/// Half-width of the top-edge strip that a pointer must dwell on while compact.
-const STRIP: f64 = 100.0;
 
 pub fn start() {
     conf::log("island tampil");
@@ -278,7 +278,7 @@ fn hover_loop() {
     let mut full_hits: u32 = 0;
     let mut compact = false;
     let mut off_hits: u32 = 0;
-    let mut dwell: u32 = 0;
+    let mut compact_wake = CompactWake::Idle;
     let mut catcher_on = false;
     let mut catcher_rect = (0, 0, 0, 0);
     let mut drag_near = false;
@@ -366,6 +366,7 @@ fn hover_loop() {
             let _ = fullscreen_app(0);
         }
         if hidden {
+            compact_wake = CompactWake::Idle;
             continue;
         }
         if iter % 240 == 0 {
@@ -528,13 +529,15 @@ fn hover_loop() {
         }
 
         let inside = if compact && !hovering {
-            // The notch is a sliver: only a deliberate dwell on the very top edge wakes it,
-            // so clicks land in the browser tab underneath.
-            let strip = cy <= 3.0 && (cx - WIN_W / 2.0).abs() <= STRIP;
-            dwell = if strip { dwell + 1 } else { 0 };
-            dwell >= 32 || filedrag // ~256 ms, or a file drag
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                GetAsyncKeyState, VK_MBUTTON, VK_RBUTTON, VK_XBUTTON1, VK_XBUTTON2,
+            };
+            let pressed = lbtn || [VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2]
+                .iter()
+                .any(|key| unsafe { GetAsyncKeyState(key.0 as i32) < 0 });
+            filedrag || compact_wake.update(cx - WIN_W / 2.0, cy, pressed, std::time::Instant::now())
         } else {
-            dwell = 0;
+            compact_wake = CompactWake::Idle;
             inside_rect || held_inside || filedrag
         };
 
